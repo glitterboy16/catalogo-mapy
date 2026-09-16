@@ -482,7 +482,8 @@
     const h1 = $('h1[itemprop="name"]', columnas);
     if (h1) {
       h1.textContent = p.n;
-      if (p.auto) h1.insertAdjacentHTML('beforebegin', etiquetaFicha(p));
+      if (p.auto) h1.insertAdjacentHTML('beforebegin',
+        '<span class="mapy-auto mapy-auto--ficha">' + ETIQUETA_AUTO + '</span>');
     }
     $$('#product_reference span, .pb-center-column p > span.editable[itemprop="sku"]', columnas)
       .forEach(s => { s.textContent = p.r; s.setAttribute('content', p.r); });
@@ -519,33 +520,12 @@
 
     montarAtributos(p);
 
-    const comprar = $('#add_to_cart', columnas);
-    if (comprar) comprar.style.display = p.auto && !p.csv.disponible_para_pedido ? 'none' : '';
-
     $$('.formesp img', columnas).forEach(img => { img.dataset.foto = principal || ''; img.dataset.tipo = 'g'; img.alt = img.title = p.n; });
     hidratar(columnas);
     $$('.formesp small', columnas).forEach(s => { s.textContent = p.n; });
     $$('.formesp input[name="producto"]', columnas).forEach(i => { i.value = p.n; });
 
     montarVistos(p.id);
-  }
-
-  function etiquetaFicha(p) {
-    const c = p.csv;
-    const fila = (k, v, vacio) => '<tr><th>' + k + '</th><td>' + (v ? esc(v) : '<em>' + vacio + '</em>') + '</td></tr>';
-    return '<div class="mapy-auto-ficha"><span class="mapy-auto">' + ETIQUETA_AUTO + '</span>' +
-      '<details><summary>Qué ha subido la automatización</summary>' +
-      '<p>Esta ficha sale tal cual de la fila del CSV que genera <code>scripts/vigilar-citizen.py</code>. ' +
-      'Solo se ha cambiado <code>Active</code> de 0 a 1, que es la revisión manual.</p><table>' +
-      fila('Descripción corta', p.det ? 'sí' : '', 'vacía: por eso DETALLES sale en blanco') +
-      fila('Descripción', c.descripcion, 'vacía') +
-      fila('EAN13', c.ean13, 'vacío') +
-      fila('Cantidad', String(c.cantidad), '0') +
-      fila('Disponible para pedido', c.disponible_para_pedido ? 'sí' : '', 'no: el botón COMPRAR no aparece') +
-      fila('Características', c.caracteristicas.map(x => x[0] + ': ' + x[1]).join(' · '), 'ninguna') +
-      fila('Logo de la marca', '', 'no lo sube: se muestra el oficial de citizen.es') +
-      '</table><p class="mapy-auto-nota">La plantilla de la tienda no muestra ni la descripción ni las ' +
-      'características: la ficha técnica de Citizen queda guardada pero no se ve.</p></details></div>';
   }
 
   function montarAtributos(p) {
@@ -774,17 +754,11 @@
         h += '</section>';
       });
 
-      const sinCompra = q.auto && !q.csv.disponible_para_pedido;
       h += '<div class="mapy-modal__acciones">' +
-        (sinCompra ? '' : '<button type="button" class="mapy-modal__boton mapy-modal__boton--lleno" data-aviso>Comprar</button>') +
+        '<button type="button" class="mapy-modal__boton mapy-modal__boton--lleno" data-aviso>Comprar</button>' +
         '<button type="button" class="mapy-modal__boton" data-aviso>Solicitar mejor precio</button></div>';
-      if (sinCompra) {
-        h += '<p class="mapy-modal__nota">Tal como sale del CSV, este reloj no se puede comprar online: ' +
-          '<code>Available for order = 0</code>. Ver el detalle abajo.</p>';
-      }
       h += '<a class="mapy-modal__ficha" href="#' + q.ruta + '">Ver la ficha completa</a>';
       if (q.det) h += '<section class="mapy-modal__bloque mapy-modal__detalles"><h3>Detalles</h3>' + q.det + '</section>';
-      if (q.auto) h += etiquetaFicha(q).replace('<span class="mapy-auto">' + ETIQUETA_AUTO + '</span>', '');
       $m('#mm-info').innerHTML = h;
       hidratar($m('#mm-info'));
     };
