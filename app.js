@@ -721,6 +721,9 @@
       q.g.forEach((g, k) => {
         const nombre = g.e.replace(/^ELIGE\s+(LA|EL)\s+/i, '').replace(/\s*:\s*$/, '');
         const esDiamante = /DIAMANTE/i.test(g.e) && g.o.every(o => !isNaN(parseFloat(o[1])));
+        // el dibujo solo vale si los quilates son de una sola piedra: en pendientes
+        // son dos y en un collar riviere son muchas, y enganaria
+        const unaPiedra = /(anillo|solitario)/i.test(q.n) && !/(pendientes|collar|colgante|pulsera)/i.test(q.n);
         h += '<section class="mapy-modal__bloque"><h3>' + esc(nombre.charAt(0) + nombre.slice(1).toLowerCase()) +
           (esDiamante ? ' <small>el precio cambia con los quilates</small>' : '') + '</h3>';
         if (g.o.length > 12 && !esDiamante) {
@@ -728,28 +731,34 @@
             g.o.map(o => '<option value="' + o[0] + '"' + (o[0] === estado.elegidos[k] ? ' selected' : '') + '>' +
               esc(o[1]) + '</option>').join('') + '</select></div>';
         } else {
-          h += '<div class="mapy-modal__chips">' + g.o.map(o => {
-            const pr = precioOpcion(q, estado.elegidos, k, o[0]);
-            return '<button type="button" data-grupo="' + k + '" data-valor="' + o[0] + '" aria-pressed="' +
-              (o[0] === estado.elegidos[k]) + '"' + (pr == null ? ' disabled' : '') + '><b>' +
+          const precios = g.o.map(o => precioOpcion(q, estado.elegidos, k, o[0]));
+          // el precio solo se repite bajo cada opcion si de verdad cambia entre ellas
+          const varia = new Set(precios.filter(x => x != null)).size > 1;
+          h += '<div class="mapy-modal__chips">' + g.o.map((o, j) =>
+            '<button type="button" data-grupo="' + k + '" data-valor="' + o[0] + '" aria-pressed="' +
+              (o[0] === estado.elegidos[k]) + '"' + (precios[j] == null ? ' disabled' : '') + '><b>' +
               esc(esDiamante ? dec(parseFloat(o[1]), 2) + ' ct' : o[1]) + '</b>' +
-              (pr != null ? '<span>' + eur(pr) + '</span>' : '') + '</button>';
-          }).join('') + '</div>';
+              (varia && precios[j] != null ? '<span>' + eur(precios[j]) + '</span>' : '') + '</button>'
+          ).join('') + '</div>';
         }
-        if (esDiamante) {
+        if (esDiamante && unaPiedra) {
           const elegido = g.o.find(o => o[0] === estado.elegidos[k]) || g.o[0];
           const ct = parseFloat(elegido[1]);
+          const mayor = Math.max(...g.o.map(o => parseFloat(o[1])));
           const mm = diametro(ct);
-          const px = Math.max(6, mm * 11);
-          h += '<div class="mapy-diamante"><svg viewBox="-60 -60 120 120" aria-hidden="true">' +
-            '<circle r="57" class="mapy-diamante__guia"/>' +
-            '<g class="mapy-diamante__piedra" style="transform:scale(' + (px / 114) + ')">' +
-              '<circle r="57"/><polygon points="0,-57 40,-40 57,0 40,40 0,57 -40,40 -57,0 -40,-40"/>' +
-              '<polygon points="0,-30 21,-21 30,0 21,21 0,30 -21,21 -30,0 -21,-21"/>' +
-              '<path d="M0-57L21-21M40-40L30 0M57 0L21 21M40 40L0 30M0 57L-21 21M-40 40L-30 0M-57 0L-21-21M-40-40L0-30' +
-              'M0-57L-21-21M40-40L21-21M57 0L30 0M40 40L21 21M0 57L0 30M-40 40L-21 21M-57 0L-30 0M-40-40L-21-21"/>' +
-            '</g></svg><p><b>' + dec(ct, 2) + ' ct</b> · diámetro aproximado <b>' + dec(mm, 1) + ' mm</b>' +
-            '<span>Referencia de talla brillante redonda. El dibujo guarda la proporción entre quilates.</span></p></div>';
+          // el circulo punteado es el quilataje mayor del producto: sirve de comparacion
+          const escala = 110 / diametro(mayor);
+          const piedra = (radio, clase) => '<g class="' + clase + '" style="transform:scale(' + (radio / 57) + ')">' +
+            '<circle r="57"/><polygon points="0,-57 40,-40 57,0 40,40 0,57 -40,40 -57,0 -40,-40"/>' +
+            '<polygon points="0,-30 21,-21 30,0 21,21 0,30 -21,21 -30,0 -21,-21"/>' +
+            '<path d="M0-57L21-21M40-40L30 0M57 0L21 21M40 40L0 30M0 57L-21 21M-40 40L-30 0M-57 0L-21-21M-40-40L0-30' +
+            'M0-57L-21-21M40-40L21-21M57 0L30 0M40 40L21 21M0 57L0 30M-40 40L-21 21M-57 0L-30 0M-40-40L-21-21"/></g>';
+          h += '<figure class="mapy-diamante"><svg viewBox="-60 -60 120 120" aria-hidden="true">' +
+            '<circle r="' + (diametro(mayor) * escala / 2).toFixed(1) + '" class="mapy-diamante__guia"/>' +
+            piedra(mm * escala / 2, 'mapy-diamante__piedra') +
+            '</svg><figcaption><b>' + dec(mm, 1) + ' mm</b> de diámetro para <b>' + dec(ct, 2) + ' ct</b>' +
+            '<span>Talla brillante redonda, a escala frente a ' + dec(mayor, 2) + ' ct, el mayor de esta pieza.</span>' +
+            '</figcaption></figure>';
         }
         h += '</section>';
       });
@@ -1005,4 +1014,5 @@
   montarCabecera();
   window.addEventListener('hashchange', pintar);
   pintar();
+  document.documentElement.classList.remove('mapy-cargando');
 })();
