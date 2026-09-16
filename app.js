@@ -708,7 +708,11 @@
       h += '<h2 id="mm-titulo">' + esc(grupo ? q.titulo : q.n) + '</h2>';
       h += '<div class="mapy-modal__precio"><span id="mm-precio">' + (precio != null ? eur(precio) : '') + '</span>' +
         (q.vt ? ' <s>' + esc(q.vt) + '</s>' : '') + (q.rt ? ' <em>' + esc(q.rt) + '</em>' : '') + '</div>';
-      h += ref ? '<p class="mapy-modal__ref"><span>Referencia</span> ' + esc(ref) + '</p>' : '';
+      h += ref || q.ean
+        ? '<p class="mapy-modal__ref">' +
+            (ref ? '<span>Referencia</span> ' + esc(ref) : '') +
+            (q.ean ? '<span>EAN</span> ' + esc(q.ean) : '') + '</p>'
+        : '';
 
       if (grupo) {
         h += '<section class="mapy-modal__bloque"><h3>Acabado <small>' + grupo.length +
@@ -768,6 +772,11 @@
         '<button type="button" class="mapy-modal__boton" data-aviso>Solicitar mejor precio</button></div>';
       h += '<a class="mapy-modal__ficha" href="#' + q.ruta + '">Ver la ficha completa</a>';
       if (q.det) h += '<section class="mapy-modal__bloque mapy-modal__detalles"><h3>Detalles</h3>' + q.det + '</section>';
+      if (q.car && q.car.length) {
+        h += '<section class="mapy-modal__bloque"><h3>Ficha técnica</h3><dl class="mapy-tecnica">' +
+          q.car.map(c => '<div><dt>' + esc(c[0]) + '</dt><dd>' + esc(c[1]) + '</dd></div>').join('') +
+          '</dl></section>';
+      }
       $m('#mm-info').innerHTML = h;
       hidratar($m('#mm-info'));
     };
