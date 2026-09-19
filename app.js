@@ -515,11 +515,16 @@
   function montarArbol(ruta) {
     NUEVAS.filter(d => !NUEVAS.some(x => x.ruta === d.padre)).forEach(anadirAlArbol);
     // la tienda pone en negrita el primero de cada lista. En una marca es su
-    // titulo ("NOVEDADES ORIS") y se queda; en la lista de marcas de Relojes,
-    // ORIS es una marca mas y va como las otras
+    // titulo ("NOVEDADES ORIS") y se queda; en la lista de marcas de Relojes
+    // ORIS es una marca mas, y en las marcas de la automatizacion el primero es
+    // una coleccion (Citizen Lady, Classic Express): van como las otras
+    const coleccion = new Set(NUEVAS.map(d => '#' + d.ruta));
     $$('#categories_block_left ul', columnas).forEach(ul => {
       const primero = ul.firstElementChild;
-      if (primero && esHijaDe($(':scope > a', primero), '/es/relojes/')) primero.classList.add('mapy-como-las-demas');
+      const a = primero && $(':scope > a', primero);
+      if (a && (esHijaDe(a, '/es/relojes/') || coleccion.has(a.getAttribute('href')))) {
+        primero.classList.add('mapy-como-las-demas');
+      }
     });
     const arbol = $('#categories_block_left .block_content', columnas);
     if (arbol) arbol.style.display = MOVIL.matches || ARBOL_OCULTO.has(ruta) ? 'none' : '';
