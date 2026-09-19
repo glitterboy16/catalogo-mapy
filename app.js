@@ -122,7 +122,6 @@
   function pintar() {
     const { ruta, q } = leerRuta();
     cerrarCapas();
-    cerrarModal(false);
     if (ruta === '/es/' || ruta === '/') return inicio();
     if (ruta.startsWith('/es/buscar')) return busqueda(q.search_query || '', q);
     if (RUTA.has(ruta)) return ficha(RUTA.get(ruta));
@@ -506,6 +505,14 @@
       .forEach(s => { s.textContent = p.r; s.setAttribute('content', p.r); });
     const refBloque = $('#product_reference', columnas);
     if (refBloque) refBloque.style.display = p.r || p.cb.length ? '' : 'none';
+    if (refBloque && p.ean) {
+      // la plantilla repite la referencia en un segundo parrafo, y es ese el que se ve
+      const sig = refBloque.nextElementSibling;
+      const visible = sig && sig.querySelector('[itemprop="sku"]') ? sig : refBloque;
+      visible.insertAdjacentHTML('afterend',
+        '<span class="titpro">EAN13</span><p class="mapy-ean"><span class="editable">' +
+        esc(p.ean) + '</span></p>');
+    }
 
     const marca = $('.marcashow', columnas);
     if (marca) {
@@ -527,6 +534,8 @@
       }
       rotulo.insertAdjacentHTML('afterend', p.det);
     }
+    const extras = $('.pb-center-column .extras', columnas);
+    if (extras) extras.insertAdjacentHTML('beforebegin', acabados(p) + tecnica(p) + aval(p.m || 'Mapy'));
 
     const precio = $('#our_price_display', columnas);
     if (precio) precio.textContent = p.pt;
@@ -558,8 +567,19 @@
         esc(o[1]) + '</option>').join('') + '</select></div></fieldset>').join('') + '</div>';
     cont.insertAdjacentHTML('beforeend', html);
 
+    const iDiam = p.g.findIndex(g => /DIAMANTE/i.test(g.e) && g.o.every(o => !isNaN(parseFloat(o[1]))));
+    const conDibujo = iDiam >= 0 && unaPiedra(p);
+    const mayor = conDibujo ? Math.max(...p.g[iDiam].o.map(o => parseFloat(o[1]))) : 0;
+    if (conDibujo) $('#attributes', columnas).insertAdjacentHTML('beforeend',
+      '<figure class="mapy-diamante" id="mapy-diamante"></figure>');
+
     const actualizar = () => {
       const elegidos = $$('#attributes select', columnas).map(s => s.value);
+      if (conDibujo) {
+        const sel = $('#' + p.g[iDiam].id, columnas);
+        $('#mapy-diamante', columnas).innerHTML =
+          figuraDiamante(parseFloat(sel.options[sel.selectedIndex].text), mayor);
+      }
       const combo = p.cb.find(c => elegidos.every(v => c[1].includes(v)));
       const precio = $('#our_price_display', columnas);
       if (combo) {
@@ -641,258 +661,81 @@
     hidratar(lista);
   }
 
-  /* ------------------------------------------------ vista rapida (mejora) */
+  /* ------------------------------------------ mejoras sobre la tienda */
+  /* Lo que trae la maqueta de Pedro, dentro de la ficha real de la tienda.
+     No hay vista rapida: cada producto se abre en su propia pagina. */
 
   // diametro aproximado de un brillante redondo segun su peso: 1 ct ~ 6,5 mm
   const diametro = ct => 6.5 * Math.cbrt(ct);
   const dec = (v, n) => v.toFixed(n).replace('.', ',');
-  let origenModal = null;
 
-  function precioOpcion(p, elegidos, grupoIdx, valor) {
-    const quiere = elegidos.slice();
-    quiere[grupoIdx] = valor;
-    const combos = p.cb.filter(c => quiere.every((v, k) => k === grupoIdx ? c[1].includes(v) : !v || c[1].includes(v)));
-    return combos.length ? (p.pb || 0) + Math.min(...combos.map(c => c[2])) : null;
+  /* Distribuidor oficial y garantia, por marca. Nada del proyecto los respalda
+     todavia: va el minimo legal (2 anos, Ley 23/2003) y la tabla por marca queda
+     vacia hasta que el cliente confirme cada acuerdo. Es el unico sitio donde se
+     tocan: 'Marca': ['Distribuidora', anos]. */
+  const AVAL = { defecto: ['Joyería Mapy', 2], marcas: {
+    // 'Citizen': ['Citizen España', 5],   <- pendiente de confirmar
+  } };
+
+  // mismo aspecto que REFERENCIA o DETALLES en la ficha real
+  const bloqueFicha = (rotulo, cuerpo) =>
+    '<div class="mapy-bloque"><span class="titpro">' + rotulo + '</span>' + cuerpo + '</div>';
+
+  function tecnica(p) {
+    const filas = (p.car && p.car.length) ? p.car : (p.sp || []);
+    if (!filas.length) return '';
+    return bloqueFicha('FICHA TÉCNICA', '<dl class="mapy-tecnica">' + filas.map(f =>
+      '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>');
   }
 
-  function abrirModal(p, desde) {
-    cerrarModal();
-    origenModal = desde || document.activeElement;
-    const grupo = p.base && GRUPO.get(p.base).length > 1 ? GRUPO.get(p.base) : null;
-    const estado = { p, foto: 0, elegidos: p.g.map(g => (g.o.find(o => o[2]) || g.o[0] || [''])[0]) };
-
-    const m = document.createElement('div');
-    m.className = 'mapy-modal';
-    m.innerHTML =
-      '<div class="mapy-modal__fondo" data-cerrar></div>' +
-      '<div class="mapy-modal__caja" role="dialog" aria-modal="true" aria-labelledby="mm-titulo">' +
-        '<button type="button" class="mapy-modal__cerrar" data-cerrar aria-label="Cerrar">' +
-          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg></button>' +
-        '<div class="mapy-modal__galeria">' +
-          '<div class="mapy-modal__visor" id="mm-visor">' +
-            '<img id="mm-foto" alt="">' +
-            '<button type="button" class="mapy-modal__flecha" data-paso="-1" aria-label="Foto anterior">' +
-              '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8"/></svg></button>' +
-            '<button type="button" class="mapy-modal__flecha mapy-modal__flecha--der" data-paso="1" aria-label="Foto siguiente">' +
-              '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg></button>' +
-            '<span class="mapy-modal__contador" id="mm-contador"></span>' +
-          '</div>' +
-          '<div class="mapy-modal__miniaturas" id="mm-miniaturas"></div>' +
-        '</div>' +
-        '<div class="mapy-modal__info" id="mm-info"></div>' +
-      '</div>';
-    document.body.appendChild(m);
-    document.documentElement.classList.add('mapy-sin-scroll');
-
-    const $m = s => m.querySelector(s);
-    const fotos = () => estado.p.im.length ? estado.p.im : (estado.p.ip ? [estado.p.ip] : []);
-
-    const pintarFoto = () => {
-      const lista = fotos();
-      const id = lista[estado.foto] || lista[0];
-      const img = $m('#mm-foto');
-      img.classList.add('cambiando');
-      const nueva = new Image();
-      nueva.onload = nueva.onerror = () => {
-        img.src = nueva.src;
-        img.alt = estado.p.n;
-        img.classList.remove('cambiando');
-      };
-      urlFoto(id, 'g').then(u => { nueva.src = u; });
-      $m('#mm-contador').textContent = lista.length > 1 ? (estado.foto + 1) + ' / ' + lista.length : '';
-      m.querySelectorAll('.mapy-modal__flecha').forEach(b => { b.hidden = lista.length < 2; });
-      $m('#mm-miniaturas').innerHTML = lista.length > 1 ? lista.map((f, k) =>
-        '<button type="button" data-foto="' + k + '" aria-pressed="' + (k === estado.foto) + '" aria-label="Foto ' +
-        (k + 1) + '"><img ' + FOTO(f, 'g') + ' alt=""></button>').join('') : '';
-      hidratar(m);
-    };
-
-    const comboActual = () => estado.p.cb.find(c => estado.elegidos.every(v => c[1].includes(v)));
-
-    const pintarInfo = () => {
-      const q = estado.p;
-      const combo = comboActual();
-      const precio = combo ? (q.pb || 0) + combo[2] : q.p;
-      const ref = (combo && combo[3]) || q.r;
-      const logo = q.ml && D.logos[q.ml]
-        ? '<img src="' + D.logos[q.ml] + '" alt="' + esc(q.m) + '">'
-        : q.m ? '<span class="mapy-modal__marca-txt">' + esc(q.m) + '</span>'
-        : '<span class="mapy-modal__marca-casa">MAPY</span>';
-
-      let h = '';
-      if (q.auto) h += '<span class="mapy-auto">' + ETIQUETA_AUTO + '</span>';
-      h += '<div class="mapy-modal__marca">' + logo + '</div>';
-      h += '<h2 id="mm-titulo">' + esc(grupo ? q.titulo : q.n) + '</h2>';
-      h += '<div class="mapy-modal__precio"><span id="mm-precio">' + (precio != null ? eur(precio) : '') + '</span>' +
-        (q.vt ? ' <s>' + esc(q.vt) + '</s>' : '') + (q.rt ? ' <em>' + esc(q.rt) + '</em>' : '') + '</div>';
-      h += ref || q.ean
-        ? '<p class="mapy-modal__ref">' +
-            (ref ? '<span>Referencia</span> ' + esc(ref) : '') +
-            (q.ean ? '<span>EAN</span> ' + esc(q.ean) : '') + '</p>'
-        : '';
-
-      if (grupo) {
-        h += '<section class="mapy-modal__bloque"><h3>Acabado <small>' + grupo.length +
-          ' modelos · cambia la foto y el precio</small></h3><div class="mapy-modal__acabados">' +
-          grupo.map(v => '<button type="button" data-variante="' + v.id + '" aria-pressed="' + (v.id === q.id) + '">' +
-            '<img ' + FOTO(v.ip, 'g') + ' alt=""><b>' + esc(v.v) + '</b>' +
-            '<span>' + (v.p != null ? eur(v.p) : '') + '</span></button>').join('') + '</div></section>';
-      }
-
-      q.g.forEach((g, k) => {
-        const nombre = g.e.replace(/^ELIGE\s+(LA|EL)\s+/i, '').replace(/\s*:\s*$/, '');
-        const esDiamante = /DIAMANTE/i.test(g.e) && g.o.every(o => !isNaN(parseFloat(o[1])));
-        // el dibujo solo vale si los quilates son de una sola piedra: en pendientes
-        // son dos y en un collar riviere son muchas, y enganaria
-        const unaPiedra = /(anillo|solitario)/i.test(q.n) && !/(pendientes|collar|colgante|pulsera)/i.test(q.n);
-        h += '<section class="mapy-modal__bloque"><h3>' + esc(nombre.charAt(0) + nombre.slice(1).toLowerCase()) +
-          (esDiamante ? ' <small>el precio cambia con los quilates</small>' : '') + '</h3>';
-        if (g.o.length > 12 && !esDiamante) {
-          h += '<div class="mapy-modal__select"><select data-grupo="' + k + '" aria-label="' + esc(nombre) + '">' +
-            g.o.map(o => '<option value="' + o[0] + '"' + (o[0] === estado.elegidos[k] ? ' selected' : '') + '>' +
-              esc(o[1]) + '</option>').join('') + '</select></div>';
-        } else {
-          const precios = g.o.map(o => precioOpcion(q, estado.elegidos, k, o[0]));
-          // el precio solo se repite bajo cada opcion si de verdad cambia entre ellas
-          const varia = new Set(precios.filter(x => x != null)).size > 1;
-          h += '<div class="mapy-modal__chips">' + g.o.map((o, j) =>
-            '<button type="button" data-grupo="' + k + '" data-valor="' + o[0] + '" aria-pressed="' +
-              (o[0] === estado.elegidos[k]) + '"' + (precios[j] == null ? ' disabled' : '') + '><b>' +
-              esc(esDiamante ? dec(parseFloat(o[1]), 2) + ' ct' : o[1]) + '</b>' +
-              (varia && precios[j] != null ? '<span>' + eur(precios[j]) + '</span>' : '') + '</button>'
-          ).join('') + '</div>';
-        }
-        if (esDiamante && unaPiedra) {
-          const elegido = g.o.find(o => o[0] === estado.elegidos[k]) || g.o[0];
-          const ct = parseFloat(elegido[1]);
-          const mayor = Math.max(...g.o.map(o => parseFloat(o[1])));
-          const mm = diametro(ct);
-          // el circulo punteado es el quilataje mayor del producto: sirve de comparacion
-          const escala = 110 / diametro(mayor);
-          const piedra = (radio, clase) => '<g class="' + clase + '" style="transform:scale(' + (radio / 57) + ')">' +
-            '<circle r="57"/><polygon points="0,-57 40,-40 57,0 40,40 0,57 -40,40 -57,0 -40,-40"/>' +
-            '<polygon points="0,-30 21,-21 30,0 21,21 0,30 -21,21 -30,0 -21,-21"/>' +
-            '<path d="M0-57L21-21M40-40L30 0M57 0L21 21M40 40L0 30M0 57L-21 21M-40 40L-30 0M-57 0L-21-21M-40-40L0-30' +
-            'M0-57L-21-21M40-40L21-21M57 0L30 0M40 40L21 21M0 57L0 30M-40 40L-21 21M-57 0L-30 0M-40-40L-21-21"/></g>';
-          h += '<figure class="mapy-diamante"><svg viewBox="-60 -60 120 120" aria-hidden="true">' +
-            '<circle r="' + (diametro(mayor) * escala / 2).toFixed(1) + '" class="mapy-diamante__guia"/>' +
-            piedra(mm * escala / 2, 'mapy-diamante__piedra') +
-            '</svg><figcaption><b>' + dec(mm, 1) + ' mm</b> de diámetro para <b>' + dec(ct, 2) + ' ct</b>' +
-            '<span>Talla brillante redonda, a escala frente a ' + dec(mayor, 2) + ' ct, el mayor de esta pieza.</span>' +
-            '</figcaption></figure>';
-        }
-        h += '</section>';
-      });
-
-      h += '<div class="mapy-modal__acciones">' +
-        '<button type="button" class="mapy-modal__boton mapy-modal__boton--lleno" data-aviso>Comprar</button>' +
-        '<button type="button" class="mapy-modal__boton" data-aviso>Solicitar mejor precio</button></div>';
-      h += '<a class="mapy-modal__ficha" href="#' + q.ruta + '">Ver la ficha completa</a>';
-      if (q.det) h += '<section class="mapy-modal__bloque mapy-modal__detalles"><h3>Detalles</h3>' + q.det + '</section>';
-      if (q.car && q.car.length) {
-        h += '<section class="mapy-modal__bloque"><h3>Ficha técnica</h3><dl class="mapy-tecnica">' +
-          q.car.map(c => '<div><dt>' + esc(c[0]) + '</dt><dd>' + esc(c[1]) + '</dd></div>').join('') +
-          '</dl></section>';
-      }
-      $m('#mm-info').innerHTML = h;
-      hidratar($m('#mm-info'));
-    };
-
-    const pintarTodo = () => { pintarFoto(); pintarInfo(); };
-    pintarTodo();
-
-    m.addEventListener('click', e => {
-      const t = e.target;
-      if (t.closest('[data-cerrar]')) return cerrarModal();
-      const paso = t.closest('[data-paso]');
-      if (paso) {
-        const n = fotos().length;
-        estado.foto = (estado.foto + Number(paso.dataset.paso) + n) % n;
-        return pintarFoto();
-      }
-      const foto = t.closest('[data-foto]');
-      if (foto) { estado.foto = Number(foto.dataset.foto); return pintarFoto(); }
-      const variante = t.closest('[data-variante]');
-      if (variante) {
-        estado.p = PROD.get(variante.dataset.variante);
-        estado.foto = 0;
-        return pintarTodo();
-      }
-      const chip = t.closest('button[data-valor]');
-      if (chip) {
-        estado.elegidos[Number(chip.dataset.grupo)] = chip.dataset.valor;
-        return pintarInfo();
-      }
-      if (t.closest('[data-aviso]')) return aviso('Vista previa: la compra y los formularios están desactivados.');
-      if (t.closest('.mapy-modal__ficha')) cerrarModal(false);
-    });
-    m.addEventListener('change', e => {
-      const s = e.target.closest('select[data-grupo]');
-      if (s) { estado.elegidos[Number(s.dataset.grupo)] = s.value; pintarInfo(); }
-    });
-
-    const visor = $m('#mm-visor');
-    visor.addEventListener('pointermove', e => {
-      if (e.pointerType !== 'mouse' || e.target.closest('button')) return;
-      const r = visor.getBoundingClientRect();
-      const img = $m('#mm-foto');
-      img.style.transformOrigin = ((e.clientX - r.left) / r.width * 100) + '% ' + ((e.clientY - r.top) / r.height * 100) + '%';
-      img.classList.add('ampliada');
-    });
-    visor.addEventListener('pointerleave', () => $m('#mm-foto').classList.remove('ampliada'));
-
-    requestAnimationFrame(() => m.classList.add('abierta'));
-    $m('.mapy-modal__cerrar').focus();
+  function aval(marca) {
+    const [dist, anos] = AVAL.marcas[marca] || AVAL.defecto;
+    return bloqueFicha('DISTRIBUIDOR OFICIAL Y GARANTÍA', '<p class="mapy-aval">' + esc(dist) +
+      ' · ' + anos + (anos === 1 ? ' año' : ' años') + ' de garantía</p>');
   }
 
-  function cerrarModal(devolverFoco = true) {
-    const m = $('.mapy-modal');
-    if (!m) return;
-    m.remove();
-    document.documentElement.classList.remove('mapy-sin-scroll');
-    if (devolverFoco && origenModal && origenModal.focus) origenModal.focus();
-    origenModal = null;
+  // los acabados de un mismo modelo: cada uno es su propia ficha
+  function acabados(p) {
+    const grupo = p.base ? GRUPO.get(p.base) : null;
+    if (!grupo || grupo.length < 2) return '';
+    return bloqueFicha('ACABADO', '<div class="mapy-acabados mapy-acabados--ficha">' + grupo.map(v =>
+      '<a class="mapy-acabado" href="#' + v.ruta + '" aria-current="' + (v.id === p.id) +
+      '" title="' + esc(v.r) + ' · ' + esc(v.pt) + '">' + esc(v.v) + '</a>').join('') +
+      '<span>' + grupo.length + ' acabados · cambia la foto y el precio</span></div>');
   }
 
-  document.addEventListener('keydown', e => {
-    const m = $('.mapy-modal');
-    if (!m) return;
-    if (e.key === 'Escape') { e.preventDefault(); cerrarModal(); }
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-      const b = m.querySelector('.mapy-modal__flecha' + (e.key === 'ArrowRight' ? '--der' : ':not(.mapy-modal__flecha--der)'));
-      if (b && !b.hidden) b.click();
-    }
-    if (e.key === 'Tab') {
-      const foco = Array.from(m.querySelectorAll('button:not([disabled]):not([hidden]), a[href], select, summary'));
-      if (!foco.length) return;
-      const primero = foco[0], ultimo = foco[foco.length - 1];
-      if (e.shiftKey && document.activeElement === primero) { e.preventDefault(); ultimo.focus(); }
-      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primero.focus(); }
-    }
-  });
+  // el dibujo solo vale si los quilates son de una sola piedra: en pendientes son
+  // dos y en un collar riviere son muchas, y enganaria
+  const unaPiedra = p => /(anillo|solitario)/i.test(p.n) && !/(pendientes|collar|colgante|pulsera)/i.test(p.n);
 
-  // en los listados, la foto y el nombre abren la vista rapida; los acabados cambian la tarjeta
+  function figuraDiamante(ct, mayor) {
+    const mm = diametro(ct), escala = 110 / diametro(mayor);
+    const radio = mm * escala / 2;
+    return '<svg viewBox="-60 -60 120 120" aria-hidden="true">' +
+      '<circle r="' + (diametro(mayor) * escala / 2).toFixed(1) + '" class="mapy-diamante__guia"/>' +
+      '<g class="mapy-diamante__piedra" style="transform:scale(' + (radio / 57) + ')">' +
+        '<circle r="57"/><polygon points="0,-57 40,-40 57,0 40,40 0,57 -40,40 -57,0 -40,-40"/>' +
+        '<polygon points="0,-30 21,-21 30,0 21,21 0,30 -21,21 -30,0 -21,-21"/>' +
+        '<path d="M0-57L21-21M40-40L30 0M57 0L21 21M40 40L0 30M0 57L-21 21M-40 40L-30 0M-57 0L-21-21M-40-40L0-30' +
+        'M0-57L-21-21M40-40L21-21M57 0L30 0M40 40L21 21M0 57L0 30M-40 40L-21 21M-57 0L-30 0M-40-40L-21-21"/>' +
+      '</g></svg><figcaption><b>' + dec(mm, 1) + ' mm</b> de diámetro para <b>' + dec(ct, 2) + ' ct</b>' +
+      '<span>Talla brillante redonda, a escala frente a ' + dec(mayor, 2) + ' ct, el mayor de esta pieza.</span>' +
+      '</figcaption>';
+  }
+
+  // en los listados, los acabados cambian la tarjeta y a donde lleva
   document.addEventListener('click', e => {
-    const acabado = e.target.closest('.mapy-acabado');
-    if (acabado) {
-      e.preventDefault();
-      const li = acabado.closest('li.ajax_block_product');
-      const v = PROD.get(acabado.dataset.id);
-      li.dataset.id = v.id;
-      $$('img', li).forEach(img => { if (v.il) { img.dataset.foto = v.il; cargarFoto(img); } });
-      $$('.product-price', li).forEach(s => { s.textContent = ' ' + v.pt + ' '; });
-      $$('.mapy-acabado', li).forEach(b => b.setAttribute('aria-pressed', b === acabado));
-      return;
-    }
-    const enlace = e.target.closest('.product_list .product_img_link, .product_list .nombre a');
-    if (!enlace || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-    const li = enlace.closest('li.ajax_block_product');
-    const p = li && PROD.get(li.dataset.id);
-    if (!p) return;
+    const acabado = e.target.closest('.product_list .mapy-acabado');
+    if (!acabado) return;
     e.preventDefault();
-    e.stopPropagation();
-    abrirModal(p, enlace);
-  }, true);
+    const li = acabado.closest('li.ajax_block_product');
+    const v = PROD.get(acabado.dataset.id);
+    li.dataset.id = v.id;
+    $$('img', li).forEach(img => { if (v.il) { img.dataset.foto = v.il; cargarFoto(img); } });
+    $$('.product-price', li).forEach(s => { s.textContent = ' ' + v.pt + ' '; });
+    $$('.product_img_link, .nombre a', li).forEach(a => a.setAttribute('href', '#' + v.ruta));
+    $$('.mapy-acabado', li).forEach(b => b.setAttribute('aria-pressed', b === acabado));
+  });
 
   /* -------------------------------------------------- otras paginas */
 
