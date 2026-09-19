@@ -2,17 +2,67 @@
   'use strict';
 
   const D = window.MAPY;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  /* Categorias que crea la automatizacion (Relojes > Citizen > coleccion). En la
+     tienda es el mismo caso que Oris, asi que se montan sobre la plantilla de una
+     coleccion de Oris: miga, arbol con las hermanas y la actual marcada. */
+  const A = window.MAPY_AUTO;
+  const NUEVAS = (A && A.categorias) || [];
+  const nombreDe = r => (NUEVAS.find(d => d.ruta === r) || D.categorias[r] || {}).nombre || '';
+  const hijasDe = r => NUEVAS.filter(d => d.padre === r);
+  const itemArbol = (d, i, todos, actual) =>
+    '<li' + (i === todos.length - 1 ? ' class="last"' : '') + '> <a href="#' + d.ruta + '"' +
+    (d.ruta === actual ? ' class="selected"' : '') + '> ' + esc(d.nombre) + ' </a></li>';
+
+  function crearCategoria(def, molde) {
+    const t = document.createElement('template');
+    t.innerHTML = molde.columnas;
+    const f = t.content;
+    const ancestros = def.ruta.split('/').filter(Boolean).slice(1, -1)
+      .map((_, i, partes) => '/es/' + partes.slice(0, i + 1).join('/') + '/');
+    const miga = $('.breadcrumb', f);
+    if (miga) miga.innerHTML = ' <a class="home" href="#/" title="Volver a Inicio">INICIO</a> ' +
+      ancestros.map(r => '<span class="navigation-pipe">&gt;</span> <a href="#' + r + '" title="' +
+        esc(nombreDe(r)) + '" data-gg="">' + esc(nombreDe(r)) + '</a>').join('') +
+      '<span class="navigation-pipe">&gt;</span>' + esc(def.nombre);
+    // con hijas se listan ellas (Citizen); si no, las hermanas con la actual marcada
+    const lista = hijasDe(def.ruta).length ? hijasDe(def.ruta) : hijasDe(def.padre);
+    const arbol = $('#categories_block_left ul.tree', f);
+    if (arbol) arbol.innerHTML = lista.map((d, i, todos) => itemArbol(d, i, todos, def.ruta)).join('');
+    $$('.category-name, .cat-name', f).forEach(e => { e.textContent = ' ' + def.nombre + ' '; });
+    // la tienda no ensena la descripcion (display:none); se deja una corta y correcta
+    const marca = def.padre === '/es/relojes/' ? '' : nombreDe(def.padre) + ' ';
+    $$('#category_description_short, #category_description_full', f).forEach(e => {
+      e.innerHTML = '<p>Relojes ' + esc(marca + def.nombre) + '.</p>';
+    });
+    $$('.lnk_more', f).forEach(a => a.setAttribute('href', '#' + def.ruta));
+    $$('input[name="producto"]', f).forEach(i => { i.value = def.nombre + ' - Joyeria Mapy'; });
+    const clave = def.ruta.split('/').filter(Boolean).slice(-1)[0];
+    return {
+      nombre: def.nombre, css: molde.css, productos: [], subcategorias: {},
+      body_class: 'category category-' + clave + ' hide-right-column lang_es',
+      columnas: t.innerHTML,
+    };
+  }
+
+  const molde = D.categorias['/es/relojes/oris/oris-aquis/'];
+  if (molde) NUEVAS.forEach(def => { if (!D.categorias[def.ruta]) D.categorias[def.ruta] = crearCategoria(def, molde); });
 
   /* Los productos que sube la automatizacion llegan en auto.js, que se reescribe
      cada noche. No van amontonados arriba: se reparten a partes iguales por todo
      el listado, entre los de la tienda, del mas reciente al mas viejo. Cada
      tarjeta automatica lleva juntos sus acabados (mismo "base"). */
-  const A = window.MAPY_AUTO;
   if (A && A.productos && A.productos.length) {
     const ids = new Set(A.productos.map(p => p.id));
     D.productos = A.productos.concat(D.productos.filter(p => !p.auto));
     const porCategoria = {};
-    A.productos.forEach(p => { (porCategoria[p.categoria] = porCategoria[p.categoria] || []).push(p); });
+    A.productos.forEach(p => (p.cats || [p.categoria]).forEach(r => {
+      (porCategoria[r] = porCategoria[r] || []).push(p);
+    }));
     Object.entries(porCategoria).forEach(([ruta, lista]) => {
       const c = D.categorias[ruta];
       if (!c) return;
@@ -34,12 +84,8 @@
     });
     A.productos.forEach(p => { if (p.genero) (D.genero[p.genero] = D.genero[p.genero] || []).push(p.id); });
   }
-  const $ = (s, r = document) => r.querySelector(s);
-  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const PROD = new Map(D.productos.map(p => [p.id, p]));
   const RUTA = new Map(D.productos.map(p => [p.ruta, p]));
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
-    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 
   /* Las fotos viajan en paquetes fotos/<tipo><n>.js (el visor admite pocos ficheros).
@@ -431,7 +477,37 @@
   const ARBOL_OCULTO = new Set(['/es/joyas/', '/es/joyas/solitarios-alianzas/', '/es/outlet/']);
   const MOVIL = window.matchMedia('(max-width: 767px)');
 
+  /* Una marca nueva entra en los arboles de la tienda donde salen sus hermanas
+     (Relojes, Tissot, SSTT...). Va por orden alfabetico detras de la primera,
+     que es como estan las marcas en la tienda: ORIS delante y luego de la A a la Z. */
+  function anadirAlArbol(def) {
+    const esHermana = a => {
+      const h = (a && a.getAttribute('href') || '').slice(1);
+      return h.startsWith(def.padre) && h.slice(def.padre.length).split('/').filter(Boolean).length === 1;
+    };
+    $$('#categories_block_left ul', columnas).forEach(ul => {
+      const items = Array.from(ul.children).filter(li => li.tagName === 'LI');
+      const enlaces = items.map(li => $(':scope > a', li));
+      if (!items.length || !enlaces.every(esHermana)) return;
+      if (enlaces.some(a => a.getAttribute('href') === '#' + def.ruta)) return;
+      const hijas = hijasDe(def.ruta);
+      const li = document.createElement('li');
+      li.innerHTML = (hijas.length ? ' <span class="grower CLOSE"> </span>' : ' ') +
+        '<a href="#' + def.ruta + '"> ' + esc(def.nombre) + ' </a>' +
+        (hijas.length ? '<ul style="display: none;">' + hijas.map((d, i, t) => itemArbol(d, i, t, '')).join('') + '</ul>' : '');
+      const antes = items.find((x, i) => i > 0 &&
+        enlaces[i].textContent.trim().localeCompare(def.nombre, 'es', { sensitivity: 'base' }) > 0);
+      if (antes) ul.insertBefore(li, antes);
+      else {
+        items[items.length - 1].classList.remove('last');
+        li.className = 'last';
+        ul.appendChild(li);
+      }
+    });
+  }
+
   function montarArbol(ruta) {
+    NUEVAS.filter(d => !NUEVAS.some(x => x.ruta === d.padre)).forEach(anadirAlArbol);
     const arbol = $('#categories_block_left .block_content', columnas);
     if (arbol) arbol.style.display = MOVIL.matches || ARBOL_OCULTO.has(ruta) ? 'none' : '';
     const boton = $('#title-block', columnas);
