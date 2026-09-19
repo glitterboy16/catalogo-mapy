@@ -400,7 +400,9 @@
 
     const precio = $('.layered_price', bloque);
     if (precio && base.length) {
-      const precios = base.map(p => p.p || 0);
+      // las piezas sin precio (Facet, hasta tener su tarifa) no cuentan para el rango
+      const precios = base.filter(p => p.p != null).map(p => p.p);
+      if (!precios.length) precios.push(0);
       const min = Math.floor(Math.min(...precios)), max = Math.ceil(Math.max(...precios));
       const lo = estado.pmin ?? min, hi = estado.pmax ?? max;
       precio.style.display = '';
@@ -477,26 +479,30 @@
   const ARBOL_OCULTO = new Set(['/es/joyas/', '/es/joyas/solitarios-alianzas/', '/es/outlet/']);
   const MOVIL = window.matchMedia('(max-width: 767px)');
 
-  /* Una marca nueva entra en los arboles de la tienda donde salen sus hermanas
-     (Relojes, Tissot, SSTT...). Va por orden alfabetico detras de la primera,
-     que es como estan las marcas en la tienda: ORIS delante y luego de la A a la Z. */
+  const esHijaDe = (a, padre) => {
+    const h = (a && a.getAttribute('href') || '').slice(1);
+    return h.startsWith(padre) && h.slice(padre.length).split('/').filter(Boolean).length === 1;
+  };
+  const compara = (x, y) => x.localeCompare(y, 'es', { sensitivity: 'base' });
+
+  /* Una marca nueva entra en los arboles de la tienda donde salen sus hermanas.
+     En Relojes las marcas van de la A a la Z detras de ORIS, y ahi entra por orden
+     alfabetico. En Joyas el orden es a mano, y va al final, que es donde
+     PrestaShop pone una categoria nueva. */
   function anadirAlArbol(def) {
-    const esHermana = a => {
-      const h = (a && a.getAttribute('href') || '').slice(1);
-      return h.startsWith(def.padre) && h.slice(def.padre.length).split('/').filter(Boolean).length === 1;
-    };
     $$('#categories_block_left ul', columnas).forEach(ul => {
       const items = Array.from(ul.children).filter(li => li.tagName === 'LI');
       const enlaces = items.map(li => $(':scope > a', li));
-      if (!items.length || !enlaces.every(esHermana)) return;
+      if (!items.length || !enlaces.every(a => esHijaDe(a, def.padre))) return;
       if (enlaces.some(a => a.getAttribute('href') === '#' + def.ruta)) return;
       const hijas = hijasDe(def.ruta);
       const li = document.createElement('li');
       li.innerHTML = (hijas.length ? ' <span class="grower CLOSE"> </span>' : ' ') +
         '<a href="#' + def.ruta + '"> ' + esc(def.nombre) + ' </a>' +
         (hijas.length ? '<ul style="display: none;">' + hijas.map((d, i, t) => itemArbol(d, i, t, '')).join('') + '</ul>' : '');
-      const antes = items.find((x, i) => i > 0 &&
-        enlaces[i].textContent.trim().localeCompare(def.nombre, 'es', { sensitivity: 'base' }) > 0);
+      const nombres = enlaces.slice(1).map(a => a.textContent.trim());
+      const alfabetico = nombres.every((n, i) => i === 0 || compara(nombres[i - 1], n) <= 0);
+      const antes = alfabetico && items.find((x, i) => i > 0 && compara(enlaces[i].textContent.trim(), def.nombre) > 0);
       if (antes) ul.insertBefore(li, antes);
       else {
         items[items.length - 1].classList.remove('last');
@@ -508,6 +514,13 @@
 
   function montarArbol(ruta) {
     NUEVAS.filter(d => !NUEVAS.some(x => x.ruta === d.padre)).forEach(anadirAlArbol);
+    // la tienda pone en negrita el primero de cada lista. En una marca es su
+    // titulo ("NOVEDADES ORIS") y se queda; en la lista de marcas de Relojes,
+    // ORIS es una marca mas y va como las otras
+    $$('#categories_block_left ul', columnas).forEach(ul => {
+      const primero = ul.firstElementChild;
+      if (primero && esHijaDe($(':scope > a', primero), '/es/relojes/')) primero.classList.add('mapy-como-las-demas');
+    });
     const arbol = $('#categories_block_left .block_content', columnas);
     if (arbol) arbol.style.display = MOVIL.matches || ARBOL_OCULTO.has(ruta) ? 'none' : '';
     const boton = $('#title-block', columnas);
@@ -626,10 +639,13 @@
     }
 
     const marca = $('.marcashow', columnas);
+    // logo de la marca: los de la tienda y Citizen van en datos.js; el de un
+    // proveedor nuevo lo deja la automatizacion en img/auto/
+    const logo = p.ml && (D.logos[p.ml] || (p.ml.startsWith('img/') ? p.ml : ''));
     if (marca) {
-      if (p.ml) {
+      if (logo) {
         const img = $('img', marca);
-        if (img) img.src = D.logos[p.ml] || '';
+        if (img) img.src = logo;
         marca.style.display = '';
       } else {
         marca.style.display = 'none';
@@ -650,6 +666,11 @@
 
     const precio = $('#our_price_display', columnas);
     if (precio) precio.textContent = p.pt;
+    // sin precio (Facet hasta tener su tarifa) PrestaShop no deja pedirlo: se
+    // quitan el precio y COMPRAR, y queda "SOLICITAR MEJOR PRECIO"
+    if (p.p == null) {
+      $$('.content_prices .price, #add_to_cart', columnas).forEach(e => { e.style.display = 'none'; });
+    }
     const viejo = $('#old_price_display', columnas);
     if (viejo) viejo.textContent = p.vt;
     const oldP = $('#old_price', columnas);
