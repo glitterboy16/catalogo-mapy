@@ -4,16 +4,33 @@
   const D = window.MAPY;
 
   /* Los productos que sube la automatizacion llegan en auto.js, que se reescribe
-     cada noche. Se ponen delante: la tienda ordena por fecha de actualizacion. */
+     cada noche. No van amontonados arriba: se reparten a partes iguales por todo
+     el listado, entre los de la tienda, del mas reciente al mas viejo. Cada
+     tarjeta automatica lleva juntos sus acabados (mismo "base"). */
   const A = window.MAPY_AUTO;
   if (A && A.productos && A.productos.length) {
-    const ids = A.productos.map(p => p.id);
+    const ids = new Set(A.productos.map(p => p.id));
     D.productos = A.productos.concat(D.productos.filter(p => !p.auto));
     const porCategoria = {};
-    A.productos.forEach(p => { (porCategoria[p.categoria] = porCategoria[p.categoria] || []).push(p.id); });
+    A.productos.forEach(p => { (porCategoria[p.categoria] = porCategoria[p.categoria] || []).push(p); });
     Object.entries(porCategoria).forEach(([ruta, lista]) => {
       const c = D.categorias[ruta];
-      if (c) c.productos = lista.concat(c.productos.filter(id => !ids.includes(id)));
+      if (!c) return;
+      const grupos = new Map();
+      lista.slice().sort((a, b) => (b.f || '').localeCompare(a.f || '')).forEach(p => {
+        const k = p.base || p.id;
+        if (!grupos.has(k)) grupos.set(k, []);
+        grupos.get(k).push(p.id);
+      });
+      const tarjetas = Array.from(grupos.values());
+      const tienda = c.productos.filter(id => !ids.has(id));
+      const total = tienda.length + tarjetas.length, paso = total / tarjetas.length;
+      const mezcla = [];
+      for (let k = 0, s = 0, g = 0; k < total; k++) {
+        const toca = g < tarjetas.length && (s >= tienda.length || k >= Math.floor(g * paso + paso / 2));
+        if (toca) mezcla.push(...tarjetas[g++]); else mezcla.push(tienda[s++]);
+      }
+      c.productos = mezcla;
     });
     A.productos.forEach(p => { if (p.genero) (D.genero[p.genero] = D.genero[p.genero] || []).push(p.id); });
   }
@@ -271,7 +288,7 @@
     montarFiltros(c, base, estado, nuevo => {
       ir(ruta, Object.assign({}, q, filtrosAQuery(nuevo), { p: '' }));
     });
-    montarArbol();
+    montarArbol(ruta);
     aplicar();
     if (q.p) window.scrollTo(0, 0);
   }
@@ -407,7 +424,25 @@
     });
   }
 
-  function montarArbol() {
+  /* El arbol de categorias de la columna izquierda. La tienda lo ensena en
+     escritorio en todas las categorias menos estas tres (comprobado una a una el
+     19/09). En movil lo esconde y su boton "VER POR CATEGORIA" no hace nada: en
+     el clon ese boton lo abre y lo cierra. */
+  const ARBOL_OCULTO = new Set(['/es/joyas/', '/es/joyas/solitarios-alianzas/', '/es/outlet/']);
+  const MOVIL = window.matchMedia('(max-width: 767px)');
+
+  function montarArbol(ruta) {
+    const arbol = $('#categories_block_left .block_content', columnas);
+    if (arbol) arbol.style.display = MOVIL.matches || ARBOL_OCULTO.has(ruta) ? 'none' : '';
+    const boton = $('#title-block', columnas);
+    if (boton && arbol) boton.addEventListener('click', e => {
+      e.preventDefault();
+      const abrir = arbol.style.display === 'none';
+      arbol.style.display = abrir ? '' : 'none';
+      // en movil la columna izquierda queda bajo la cabecera fija: se abre bajo el boton
+      const fila = boton.closest('.content_sortPagiBar');
+      if (abrir && fila) fila.after($('#categories_block_left', columnas));
+    });
     $$('#categories_block_left span.grower', columnas).forEach(g => g.addEventListener('click', () => {
       const abierto = g.classList.contains('OPEN');
       g.classList.toggle('OPEN', !abierto);
@@ -869,12 +904,6 @@
     }
   });
 
-  const tira = $('#mapy-tira-auto');
-  if (tira) tira.addEventListener('click', e => {
-    e.preventDefault();
-    ir('/es/relojes/');
-  });
-
   Object.values(D.categorias).forEach(c => { c.set = new Set(c.productos); });
   Object.keys(D.genero).forEach(k => { D.genero[k] = new Set(D.genero[k]); });
   // tras elegir combinacion, el JS de la tienda reescribe el precio con otro formato: "€ 12,600"
@@ -883,7 +912,5 @@
   montarCabecera();
   window.addEventListener('hashchange', pintar);
   pintar();
-  const cuenta = $('#mapy-n-auto');
-  if (cuenta) cuenta.textContent = A && A.productos ? A.productos.length : 0;
   document.documentElement.classList.remove('mapy-cargando');
 })();
