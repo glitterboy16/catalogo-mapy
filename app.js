@@ -2,6 +2,21 @@
   'use strict';
 
   const D = window.MAPY;
+
+  /* Los productos que sube la automatizacion llegan en auto.js, que se reescribe
+     cada noche. Se ponen delante: la tienda ordena por fecha de actualizacion. */
+  const A = window.MAPY_AUTO;
+  if (A && A.productos && A.productos.length) {
+    const ids = A.productos.map(p => p.id);
+    D.productos = A.productos.concat(D.productos.filter(p => !p.auto));
+    const porCategoria = {};
+    A.productos.forEach(p => { (porCategoria[p.categoria] = porCategoria[p.categoria] || []).push(p.id); });
+    Object.entries(porCategoria).forEach(([ruta, lista]) => {
+      const c = D.categorias[ruta];
+      if (c) c.productos = lista.concat(c.productos.filter(id => !ids.includes(id)));
+    });
+    A.productos.forEach(p => { if (p.genero) (D.genero[p.genero] = D.genero[p.genero] || []).push(p.id); });
+  }
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const PROD = new Map(D.productos.map(p => [p.id, p]));
@@ -31,6 +46,8 @@
     return PAQUETES[clave];
   }
   function urlFoto(id, tipo) {
+    // fotos de la automatizacion: ficheros sueltos en img/auto, sin paquete
+    if (id && id.startsWith('auto/')) return Promise.resolve('img/' + id + (tipo === 'l' ? '-l' : '') + '.avif');
     const n = id && D.paquetes[tipo] ? D.paquetes[tipo][id] : undefined;
     if (n === undefined) return Promise.resolve(PIXEL);
     return paquete(tipo, n).then(d => d[id] ? 'data:image/avif;base64,' + d[id] : PIXEL, () => PIXEL);
@@ -1023,5 +1040,7 @@
   montarCabecera();
   window.addEventListener('hashchange', pintar);
   pintar();
+  const cuenta = $('#mapy-n-auto');
+  if (cuenta) cuenta.textContent = A && A.productos ? A.productos.length : 0;
   document.documentElement.classList.remove('mapy-cargando');
 })();
