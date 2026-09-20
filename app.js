@@ -182,9 +182,14 @@
     location.hash = ruta + (qs ? '?' + qs : '');
   }
 
+  let enPantalla = null;
+
   function pintar() {
     const { ruta, q } = leerRuta();
     cerrarCapas();
+    const previo = enPantalla;
+    enPantalla = RUTA.get(ruta) || null;
+    conservarScroll = !!(previo && enPantalla && previo.base && previo.base === enPantalla.base);
     if (ruta === '/es/' || ruta === '/') return inicio();
     if (ruta.startsWith('/es/buscar')) return busqueda(q.search_query || '', q);
     if (RUTA.has(ruta)) return ficha(RUTA.get(ruta));
@@ -193,6 +198,9 @@
     return noIncluida(ruta);
   }
 
+  // al cambiar de talla o acabado no se vuelve arriba: es la misma pieza
+  let conservarScroll = false;
+
   function preparar(id, clase, html, css) {
     $$('style[id^="css-"]').forEach(s => { s.media = s.id === 'css-' + (css || D.inicio.css) ? 'all' : 'not all'; });
     cuerpo.id = id;
@@ -200,7 +208,7 @@
     columnas.innerHTML = html;
     // bloques del pie que la tienda solo pinta en las fichas
     $$('#viewed-products_block_left, #footer .skillshop').forEach(b => { b.style.display = id === 'product' ? '' : 'none'; });
-    window.scrollTo(0, 0);
+    if (!conservarScroll) window.scrollTo(0, 0);
   }
 
   /* --------------------------------------------------------- listados */
