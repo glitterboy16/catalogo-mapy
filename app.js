@@ -214,16 +214,19 @@
     if (i >= total - (total % 4 || 4)) clases.push('last-line');
     const titulo = esc(p.n);
     const href = '#' + p.ruta;
-    const precio = '<span itemprop="price" class="price product-price"> ' + esc(p.pt) + ' </span>' +
+    // Facet no da precio hasta tener su tarifa: la tarjeta lo dice y la ficha
+    // ofrece el boton de consultar
+    const precio = '<span itemprop="price" class="price product-price' + (p.p == null ? ' mapy-consultar' : '') +
+      '"> ' + esc(p.p == null ? 'Consultar precio' : p.pt) + ' </span>' +
       (p.vt ? ' <span class="old-price product-price"> ' + esc(p.vt) + ' </span>' : '') +
       (p.rt ? ' <span class="price-percent-reduction">' + esc(p.rt) + '</span>' : '') +
       '<meta itemprop="priceCurrency" content="0">';
     const grupo = p.base ? GRUPO.get(p.base) : null;
     const acabados = grupo && grupo.length > 1
-      ? '<div class="mapy-acabados" role="group" aria-label="Acabados">' + grupo.map(v =>
+      ? '<div class="mapy-acabados" role="group" aria-label="' + esc(p.vl || 'Acabados') + '">' + grupo.map(v =>
           '<button type="button" class="mapy-acabado" data-id="' + v.id + '" aria-pressed="' + (v.id === p.id) +
-          '" aria-label="Acabado ' + esc(v.r) + '">' + esc(v.v) + '</button>').join('') +
-        '<span>' + grupo.length + ' acabados</span></div>'
+          '" aria-label="' + esc(v.r) + '">' + esc(v.v) + '</button>').join('') +
+        '<span>' + grupo.length + ' ' + (p.vl || 'acabados') + '</span></div>'
       : '';
     return '<li class="' + clases.join(' ') + '" id="' + esc(p.m) + '" data-id="' + p.id + '">' +
       '<div class="product-container offer-' + esc(p.m) + '" itemscope itemtype="http://schema.org/Product">' +
@@ -675,6 +678,11 @@
     // quitan el precio y COMPRAR, y queda "SOLICITAR MEJOR PRECIO"
     if (p.p == null) {
       $$('.content_prices .price, #add_to_cart', columnas).forEach(e => { e.style.display = 'none'; });
+      const consultar = $('#btncontact', columnas);
+      if (consultar) {
+        consultar.textContent = 'CONSULTAR PRECIO';
+        consultar.classList.add('mapy-consultar-boton');
+      }
     }
     const viejo = $('#old_price_display', columnas);
     if (viejo) viejo.textContent = p.vt;
@@ -835,10 +843,13 @@
   function acabados(p) {
     const grupo = p.base ? GRUPO.get(p.base) : null;
     if (!grupo || grupo.length < 2) return '';
-    return bloqueFicha('ACABADO', '<div class="mapy-acabados mapy-acabados--ficha">' + grupo.map(v =>
+    const palabra = p.vl || 'acabados';
+    const cambia = p.p == null ? 'cambian el peso en oro y el diamante' : 'cambia la foto y el precio';
+    return bloqueFicha(p.vl ? p.vl.toUpperCase() : 'ACABADO',
+      '<div class="mapy-acabados mapy-acabados--ficha">' + grupo.map(v =>
       '<a class="mapy-acabado" href="#' + v.ruta + '" aria-current="' + (v.id === p.id) +
-      '" title="' + esc(v.r) + ' · ' + esc(v.pt) + '">' + esc(v.v) + '</a>').join('') +
-      '<span>' + grupo.length + ' acabados · cambia la foto y el precio</span></div>');
+      '" title="' + esc(v.r) + (v.pt ? ' · ' + esc(v.pt) : '') + '">' + esc(v.v) + '</a>').join('') +
+      '<span>' + grupo.length + ' ' + palabra + ' · ' + cambia + '</span></div>');
   }
 
   // el dibujo solo vale si los quilates son de una sola piedra: en pendientes son
