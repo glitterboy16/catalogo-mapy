@@ -12,6 +12,7 @@
      coleccion de Oris: miga, arbol con las hermanas y la actual marcada. */
   const A = window.MAPY_AUTO;
   const NUEVAS = (A && A.categorias) || [];
+  const JOYAS = '/es/joyas/';
   const nombreDe = r => (NUEVAS.find(d => d.ruta === r) || D.categorias[r] || {}).nombre || '';
   const hijasDe = r => NUEVAS.filter(d => d.padre === r);
   const itemArbol = (d, i, todos, actual) =>
@@ -36,8 +37,9 @@
     $$('.category-name, .cat-name', f).forEach(e => { e.textContent = ' ' + def.nombre + ' '; });
     // la tienda no ensena la descripcion (display:none); se deja una corta y correcta
     const marca = def.padre === '/es/relojes/' ? '' : nombreDe(def.padre) + ' ';
+    const seccion = def.ruta.startsWith(JOYAS) ? 'Joyas ' : 'Relojes ';
     $$('#category_description_short, #category_description_full', f).forEach(e => {
-      e.innerHTML = '<p>Relojes ' + esc(marca + def.nombre) + '.</p>';
+      e.innerHTML = '<p>' + seccion + esc(marca + def.nombre) + '.</p>';
     });
     $$('.lnk_more', f).forEach(a => a.setAttribute('href', '#' + def.ruta));
     $$('input[name="producto"]', f).forEach(i => { i.value = def.nombre + ' - Joyeria Mapy'; });
@@ -51,6 +53,35 @@
 
   const molde = D.categorias['/es/relojes/oris/oris-aquis/'];
   if (molde) NUEVAS.forEach(def => { if (!D.categorias[def.ruta]) D.categorias[def.ruta] = crearCategoria(def, molde); });
+
+  /* De una marca automatizada solo sale lo que publica la automatizacion: lo
+     que la tienda subio a mano (Facet, 444 productos) llega en auto.js como
+     "ocultar" y no se ensena. En produccion es el mismo lote, desactivado. Las
+     categorias que se quedan sin nada (Certificado GIA) salen de los menus. */
+  const OCULTAR = new Set((A && A.ocultar) || []);
+  const VACIADAS = new Set();
+  if (OCULTAR.size) {
+    const fuera = id => !OCULTAR.has(id);
+    D.productos = D.productos.filter(p => fuera(p.id));
+    D.destacados = D.destacados.filter(fuera);
+    Object.entries(D.categorias).forEach(([ruta, c]) => {
+      const antes = c.productos.length;
+      c.productos = c.productos.filter(fuera);
+      if (antes && !c.productos.length) VACIADAS.add(ruta);
+    });
+    Object.keys(D.genero).forEach(k => { D.genero[k] = D.genero[k].filter(fuera); });
+  }
+  const sinVaciadas = raiz => {
+    if (!VACIADAS.size) return;
+    $$('a[href^="#/es/"]', raiz).forEach(a => {
+      const li = a.closest('li');
+      if (!li || !VACIADAS.has(a.getAttribute('href').slice(1).split('#')[0])) return;
+      const ul = li.parentElement;
+      li.remove();
+      const ultimo = ul && ul.lastElementChild;
+      if (ultimo) ultimo.classList.add('last');
+    });
+  };
 
   /* Los productos que sube la automatizacion llegan en auto.js, que se reescribe
      cada noche. No van amontonados arriba: se reparten a partes iguales por todo
@@ -383,6 +414,7 @@
       if (nombre.startsWith('layered_category_')) {
         clave = c.subcategorias[inp.value] || null;
         lista = estado.cat;
+        if (VACIADAS.has(clave)) { inp.closest('li').remove(); return; }
       } else if (nombre.startsWith('layered_id_feature_')) {
         clave = inp.value.split('_')[0];
         lista = estado.gen;
@@ -498,8 +530,8 @@
 
   /* Una marca nueva entra en los arboles de la tienda donde salen sus hermanas.
      En Relojes las marcas van de la A a la Z detras de ORIS, y ahi entra por orden
-     alfabetico. En Joyas el orden es a mano, y va al final, que es donde
-     PrestaShop pone una categoria nueva. */
+     alfabetico; si la lista esta ordenada a mano, va al final, que es donde
+     PrestaShop pone una categoria nueva. Las de Joyas van aparte (marcasDeJoyas). */
   function anadirAlArbol(def) {
     $$('#categories_block_left ul', columnas).forEach(ul => {
       const items = Array.from(ul.children).filter(li => li.tagName === 'LI');
@@ -523,8 +555,51 @@
     });
   }
 
+  /* Joyas se ordena como Relojes: primero las marcas y, debajo, las categorias
+     y los filtros. De momento la unica es Facet, con Classic Express. Donde la
+     tienda esconde el arbol (Joyas, Compromiso) las categorias ya salen en los
+     filtros, y ahi el bloque lleva solo las marcas. */
+  function marcasDeJoyas(ruta) {
+    const marcas = hijasDe(JOYAS);
+    const caja = $('#categories_block_left .block_content', columnas);
+    if (!ruta.startsWith(JOYAS) || !marcas.length || !caja) return false;
+    const item = (d, i, todos) => {
+      const hijas = hijasDe(d.ruta);
+      const dentro = ruta.startsWith(d.ruta);
+      return '<li' + (i === todos.length - 1 ? ' class="last"' : '') + '>' +
+        (hijas.length ? ' <span class="grower ' + (dentro ? 'OPEN' : 'CLOSE') + '"> </span>' : ' ') +
+        '<a href="#' + d.ruta + '"' + (d.ruta === ruta ? ' class="selected"' : '') + '> ' + esc(d.nombre) + ' </a>' +
+        (hijas.length ? '<ul style="display: ' + (dentro ? 'block' : 'none') + ';">' +
+          hijas.map((h, j, t) => itemArbol(h, j, t, ruta)).join('') + '</ul>' : '') + '</li>';
+    };
+    const tipos = $(':scope > ul.tree', caja);
+    // la pagina de una marca sale de la plantilla de una coleccion de Oris: su
+    // arbol se cambia por las categorias de Joyas, como en el resto de la seccion
+    if (tipos && NUEVAS.some(d => d.ruta === ruta)) {
+      const t = document.createElement('template');
+      t.innerHTML = D.categorias[JOYAS].columnas;
+      const deJoyas = $('#categories_block_left ul.tree', t.content);
+      tipos.innerHTML = deJoyas ? deJoyas.innerHTML : '';
+      sinVaciadas(tipos);
+    }
+    const soloMarcas = ARBOL_OCULTO.has(ruta) || !tipos || !tipos.children.length;
+    caja.insertAdjacentHTML('afterbegin',
+      '<p class="mapy-arbol-titulo">Marcas</p><ul class="tree dynamized mapy-marcas">' +
+      marcas.map(item).join('') + '</ul>' + (soloMarcas ? '' : '<p class="mapy-arbol-titulo">Categorías</p>'));
+    if (tipos && soloMarcas) tipos.style.display = 'none';
+    // con su titulo encima, la primera categoria ya no hace de titulo: va como las demas
+    if (tipos && tipos.firstElementChild) tipos.firstElementChild.classList.add('mapy-como-las-demas');
+    // el tema esconde el bloque entero en Joyas y en Compromiso
+    // (body.category-12 / -20 #categories_block_left): con marcas se ensena
+    caja.parentElement.style.setProperty('display', 'block', 'important');
+    return true;
+  }
+
   function montarArbol(ruta) {
-    NUEVAS.filter(d => !NUEVAS.some(x => x.ruta === d.padre)).forEach(anadirAlArbol);
+    // las marcas de Joyas no entran en su arbol: van en su propio bloque, encima
+    NUEVAS.filter(d => d.padre !== JOYAS && !NUEVAS.some(x => x.ruta === d.padre)).forEach(anadirAlArbol);
+    sinVaciadas($('#categories_block_left', columnas));
+    const conMarcas = marcasDeJoyas(ruta);
     // la tienda pone en negrita el primero de cada lista. En una marca es su
     // titulo ("NOVEDADES ORIS") y se queda; en la lista de marcas de Relojes
     // ORIS es una marca mas, y en las marcas de la automatizacion el primero es
@@ -538,7 +613,7 @@
       }
     });
     const arbol = $('#categories_block_left .block_content', columnas);
-    if (arbol) arbol.style.display = MOVIL.matches || ARBOL_OCULTO.has(ruta) ? 'none' : '';
+    if (arbol) arbol.style.display = MOVIL.matches || (ARBOL_OCULTO.has(ruta) && !conMarcas) ? 'none' : '';
     const boton = $('#title-block', columnas);
     if (boton && arbol) boton.addEventListener('click', e => {
       e.preventDefault();
