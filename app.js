@@ -684,7 +684,7 @@
       img.alt = img.title = p.n;
       img.removeAttribute('srcset');
     });
-    montarZoom();
+    montarGaleria(p);
 
     const lista = $('#thumbs_list_frame', columnas);
     const vistas = $('#views_block', columnas);
@@ -821,31 +821,61 @@
     actualizar();
   }
 
-  function montarZoom() {
-    const caja = $('#image-block .zoom', columnas);
+  /* La ficha enseña tres fotos a la vez, como Joyeria Suarez, y al pulsar una
+     se abre un visor limpio. Fuera el zoom automatico al pasar el raton, que
+     es lo que pidio el cliente (21/09). En movil manda la foto entera con sus
+     flechas; el collage es de escritorio. */
+  function montarGaleria(p) {
+    const caja = $('#image-block', columnas);
     if (!caja) return;
-    const img = $('img', caja);
-    let lupa = null;
-    caja.style.position = 'relative';
-    caja.style.overflow = 'hidden';
-    caja.addEventListener('mouseenter', () => {
-      lupa = document.createElement('img');
-      lupa.className = 'zoomImg';
-      lupa.src = img.src;
-      lupa.alt = '';
-      Object.assign(lupa.style, { position: 'absolute', top: 0, left: 0, opacity: 1, border: 'none',
-        maxWidth: 'none', maxHeight: 'none', width: (img.clientWidth * 1.43) + 'px',
-        height: (img.clientHeight * 1.43) + 'px', pointerEvents: 'none' });
-      caja.appendChild(lupa);
+    const fotos = [p.ip, ...(p.im || [])].filter((x, i, t) => x && t.indexOf(x) === i);
+    if (!fotos.length) return;
+    const visibles = fotos.slice(0, 3);
+    caja.innerHTML = '<div class="mapy-collage' + (visibles.length > 1 ? '' : ' mapy-collage--una') + '">' +
+      visibles.map((id, i) =>
+        '<button type="button" class="mapy-foto" data-i="' + i + '" aria-label="Ver la foto ' +
+        (i + 1) + ' de ' + fotos.length + '"><img ' + FOTO(id, 'g') + ' alt="' + esc(p.n) + '"></button>'
+      ).join('') +
+      (fotos.length > 3 ? '<button type="button" class="mapy-mas-fotos" data-i="3">+' +
+        (fotos.length - 3) + ' fotos</button>' : '') + '</div>';
+    hidratar(caja);
+    const vistas = $('#views_block', columnas);
+    if (vistas) vistas.style.display = 'none';
+    $$('button[data-i]', caja).forEach(b =>
+      b.addEventListener('click', () => visor(fotos, +b.dataset.i, p.n)));
+  }
+
+  /* El visor: la foto, las flechas si hay mas de una, y nada mas. Se cierra con
+     la X, con Escape o pulsando fuera. */
+  function visor(fotos, desde, titulo) {
+    let i = desde;
+    const capa = document.createElement('div');
+    capa.className = 'mapy-visor';
+    capa.innerHTML = '<button type="button" class="mapy-visor__cerrar" aria-label="Cerrar">&times;</button>' +
+      (fotos.length > 1 ? '<button type="button" class="mapy-visor__ir" data-d="-1" aria-label="Foto anterior">&#8249;</button>' : '') +
+      '<figure><img alt="' + esc(titulo) + '"><figcaption></figcaption></figure>' +
+      (fotos.length > 1 ? '<button type="button" class="mapy-visor__ir mapy-visor__ir--der" data-d="1" aria-label="Foto siguiente">&#8250;</button>' : '');
+    const img = $('img', capa), pie = $('figcaption', capa);
+    const pintar = () => {
+      urlFoto(fotos[i], 'g').then(u => { img.src = u; });
+      pie.textContent = fotos.length > 1 ? (i + 1) + ' de ' + fotos.length : '';
+    };
+    const mover = d => { i = (i + d + fotos.length) % fotos.length; pintar(); };
+    const cerrar = () => { capa.remove(); document.removeEventListener('keydown', teclas); };
+    const teclas = e => {
+      if (e.key === 'Escape') cerrar();
+      if (e.key === 'ArrowLeft') mover(-1);
+      if (e.key === 'ArrowRight') mover(1);
+    };
+    capa.addEventListener('click', e => {
+      const ir = e.target.closest('[data-d]');
+      if (ir) return mover(+ir.dataset.d);
+      if (e.target === capa || e.target.closest('.mapy-visor__cerrar')) cerrar();
     });
-    caja.addEventListener('mousemove', e => {
-      if (!lupa) return;
-      const r = caja.getBoundingClientRect();
-      const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-      lupa.style.left = -(lupa.clientWidth - r.width) * x + 'px';
-      lupa.style.top = -(lupa.clientHeight - r.height) * y + 'px';
-    });
-    caja.addEventListener('mouseleave', () => { if (lupa) lupa.remove(); lupa = null; });
+    document.addEventListener('keydown', teclas);
+    document.body.appendChild(capa);
+    pintar();
+    $('.mapy-visor__cerrar', capa).focus();
   }
 
   function montarCarrusel() {
@@ -909,11 +939,17 @@
   const bloqueFicha = (rotulo, cuerpo) =>
     '<div class="mapy-bloque"><span class="titpro">' + rotulo + '</span>' + cuerpo + '</div>';
 
+  /* Especificaciones tecnicas: debajo de la descripcion y plegadas, como en
+     Joyeria Suarez. Se abren con un enlace subrayado, "Mostrar mas" (Angel,
+     21/09). <details> lo hace el navegador: funciona sin JS y se puede leer
+     con el teclado. */
   function tecnica(p) {
     const filas = (p.car && p.car.length) ? p.car : (p.sp || []);
     if (!filas.length) return '';
-    return bloqueFicha('FICHA TÉCNICA', '<dl class="mapy-tecnica">' + filas.map(f =>
-      '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>');
+    return '<details class="mapy-specs"><summary>Mostrar más</summary>' +
+      bloqueFicha('ESPECIFICACIONES TÉCNICAS', '<dl class="mapy-tecnica">' + filas.map(f =>
+        '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>') +
+      '</details>';
   }
 
   function aval(marca) {
