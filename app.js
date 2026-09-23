@@ -754,6 +754,7 @@
     }
     const extras = $('.pb-center-column .extras', columnas);
     if (extras) extras.insertAdjacentHTML('beforebegin', acabados(p) + tecnica(p) + aval(p.m || 'Mapy'));
+    montarSpecs();
 
     const precio = $('#our_price_display', columnas);
     if (precio) precio.textContent = p.pt;
@@ -874,6 +875,7 @@
     });
     document.addEventListener('keydown', teclas);
     document.body.appendChild(capa);
+    requestAnimationFrame(() => capa.classList.add('mapy-visor--abierto'));
     pintar();
     $('.mapy-visor__cerrar', capa).focus();
   }
@@ -946,10 +948,26 @@
   function tecnica(p) {
     const filas = (p.car && p.car.length) ? p.car : (p.sp || []);
     if (!filas.length) return '';
-    return '<details class="mapy-specs"><summary>Mostrar más</summary>' +
+    // el desplegable se abre con una transicion: <details> abre de golpe, asi
+    // que va un boton con su cuerpo, que crece de 0fr a 1fr
+    return '<div class="mapy-specs">' +
+      '<button type="button" class="mapy-specs__ver" aria-expanded="false" ' +
+      'aria-controls="mapy-specs-cuerpo">Mostrar más</button>' +
+      '<div class="mapy-specs__cuerpo" id="mapy-specs-cuerpo"><div>' +
       bloqueFicha('ESPECIFICACIONES TÉCNICAS', '<dl class="mapy-tecnica">' + filas.map(f =>
         '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>') +
-      '</details>';
+      '</div></div></div>';
+  }
+
+  function montarSpecs() {
+    const caja = $('.mapy-specs', columnas);
+    if (!caja) return;
+    const boton = $('.mapy-specs__ver', caja);
+    boton.addEventListener('click', () => {
+      const abierto = caja.classList.toggle('mapy-specs--abierto');
+      boton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+      boton.textContent = abierto ? 'Mostrar menos' : 'Mostrar más';
+    });
   }
 
   function aval(marca) {
