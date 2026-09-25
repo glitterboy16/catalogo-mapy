@@ -831,19 +831,49 @@
     if (!caja) return;
     const fotos = [p.ip, ...(p.im || [])].filter((x, i, t) => x && t.indexOf(x) === i);
     if (!fotos.length) return;
-    const visibles = fotos.slice(0, 3);
-    caja.innerHTML = '<div class="mapy-collage' + (visibles.length > 1 ? '' : ' mapy-collage--una') + '">' +
+    // con giro de 360 grados (Facet, 25/09) la tercera casilla es el giro
+    const cuantas = p.v360 ? 2 : 3;
+    const visibles = fotos.slice(0, cuantas);
+    const giro = p.v360 ? '<button type="button" class="mapy-foto mapy-foto--360" aria-label="Ver la pieza en 360 grados">' +
+      '<img ' + FOTO(fotos[fotos.length > 1 ? 1 : 0], 'g') + ' alt="">' +
+      '<span class="mapy-360"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-5 0-9 2.2-9 5 0 2.3 2.7 4.2 6.5 4.8M12 5c5 0 9 2.2 9 5 0 2.1-2.3 3.9-5.7 4.6"/>' +
+      '<path d="M8 12.5l1.8 2.3L7.6 17"/></svg>360°</span></button>' : '';
+    caja.innerHTML = '<div class="mapy-collage' + (visibles.length > 1 || giro ? '' : ' mapy-collage--una') + '">' +
       visibles.map((id, i) =>
         '<button type="button" class="mapy-foto" data-i="' + i + '" aria-label="Ver la foto ' +
         (i + 1) + ' de ' + fotos.length + '"><img ' + FOTO(id, 'g') + ' alt="' + esc(p.n) + '"></button>'
-      ).join('') +
-      (fotos.length > 3 ? '<button type="button" class="mapy-mas-fotos" data-i="3">+' +
-        (fotos.length - 3) + ' fotos</button>' : '') + '</div>';
+      ).join('') + giro +
+      (fotos.length > cuantas ? '<button type="button" class="mapy-mas-fotos" data-i="' + cuantas + '">+' +
+        (fotos.length - cuantas) + ' fotos</button>' : '') + '</div>';
     hidratar(caja);
     const vistas = $('#views_block', columnas);
     if (vistas) vistas.style.display = 'none';
     $$('button[data-i]', caja).forEach(b =>
       b.addEventListener('click', () => visor(fotos, +b.dataset.i, p.n)));
+    const b360 = $('.mapy-foto--360', caja);
+    if (b360) b360.addEventListener('click', () => visor360(p.v360, p.n));
+  }
+
+  /* El giro de 360 grados que publica el proveedor (Spinzam, el mismo que
+     ensena el portal de Facet). Se carga solo al abrirlo: son muchas fotos. */
+  function visor360(url, titulo) {
+    const capa = document.createElement('div');
+    capa.className = 'mapy-visor mapy-visor--360';
+    capa.innerHTML = '<button type="button" class="mapy-visor__cerrar" aria-label="Cerrar">&times;</button>' +
+      '<figure><div class="mapy-360__marco"><span class="mapy-360__cargando">Cargando la vista 360°…</span>' +
+      '<iframe title="' + esc(titulo) + ' en 360 grados" src="' + esc(url) + '" allow="fullscreen" ' +
+      'loading="eager"></iframe></div><figcaption>Arrastra para girar la pieza</figcaption></figure>';
+    const marco = $('iframe', capa);
+    marco.addEventListener('load', () => capa.classList.add('mapy-visor--listo'));
+    const cerrar = () => { capa.remove(); document.removeEventListener('keydown', teclas); };
+    const teclas = e => { if (e.key === 'Escape') cerrar(); };
+    capa.addEventListener('click', e => {
+      if (e.target === capa || e.target.closest('.mapy-visor__cerrar')) cerrar();
+    });
+    document.addEventListener('keydown', teclas);
+    document.body.appendChild(capa);
+    requestAnimationFrame(() => capa.classList.add('mapy-visor--abierto'));
+    $('.mapy-visor__cerrar', capa).focus();
   }
 
   /* El visor: la foto, las flechas si hay mas de una, y nada mas. Se cierra con
