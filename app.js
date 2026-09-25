@@ -147,16 +147,20 @@
     return paquete(tipo, n).then(d => d[id] ? 'data:image/avif;base64,' + d[id] : PIXEL, () => PIXEL);
   }
   const FOTO = (id, tipo) => 'src="' + PIXEL + '" data-foto="' + (id || '') + '" data-tipo="' + tipo + '"';
-  // carga las fotos de los <img data-foto> cuando se acercan a la pantalla
+  // carga las fotos de los [data-foto] cuando se acercan a la pantalla: los <img>
+  // y los botones de acabado, que llevan la foto de fondo
   const vigia = 'IntersectionObserver' in window ? new IntersectionObserver(entradas => {
     entradas.forEach(e => { if (e.isIntersecting) { vigia.unobserve(e.target); cargarFoto(e.target); } });
   }, { rootMargin: '600px 0px' }) : null;
   function cargarFoto(img) {
     const id = img.dataset.foto, tipo = img.dataset.tipo;
-    urlFoto(id, tipo).then(u => { if (img.dataset.foto === id) img.src = u; });
+    urlFoto(id, tipo).then(u => {
+      if (img.dataset.foto !== id) return;
+      if (img.tagName === 'IMG') img.src = u; else img.style.backgroundImage = 'url("' + u + '")';
+    });
   }
   function hidratar(raiz) {
-    (raiz || document).querySelectorAll('img[data-foto]').forEach(img => {
+    (raiz || document).querySelectorAll('[data-foto]').forEach(img => {
       if (img.dataset.hidratada === img.dataset.foto) return;
       img.dataset.hidratada = img.dataset.foto;
       if (vigia && img.closest('.product_list')) vigia.observe(img); else cargarFoto(img);
@@ -165,6 +169,7 @@
   const miles = v => String(Math.round(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   const eur = v => miles(v) + ' €';
   const POR_PAGINA = 96;
+  const ACABADOS_VISIBLES = 5;              // en la tarjeta; el resto, en la ficha
   const GRUPO = new Map();
   D.productos.forEach(p => {
     if (!p.base) return;
@@ -261,10 +266,21 @@
       (p.rt ? ' <span class="price-percent-reduction">' + esc(p.rt) + '</span>' : '') +
       '<meta itemprop="priceCurrency" content="0">';
     const grupo = p.base ? GRUPO.get(p.base) : null;
+    // cada acabado enseña su reloj, no la letra de la referencia (25/09, Ángel);
+    // los tamaños de Facet se distinguen mejor por su texto («0,10 ct»)
+    const conFoto = grupo && !p.vl;
+    const vistos = !conFoto || grupo.length <= ACABADOS_VISIBLES ? grupo
+      : grupo.slice(0, ACABADOS_VISIBLES).includes(p) ? grupo.slice(0, ACABADOS_VISIBLES)
+      : grupo.slice(0, ACABADOS_VISIBLES - 1).concat(p);
     const acabados = grupo && grupo.length > 1
-      ? '<div class="mapy-acabados" role="group" aria-label="' + esc(p.vl || 'Acabados') + '">' + grupo.map(v =>
+      ? '<div class="mapy-acabados' + (conFoto ? ' mapy-acabados--foto' : '') + '" role="group" aria-label="' +
+        esc(p.vl || 'Acabados') + '">' + vistos.map(v =>
           '<button type="button" class="mapy-acabado" data-id="' + v.id + '" aria-pressed="' + (v.id === p.id) +
-          '" aria-label="' + esc(v.r) + '">' + esc(v.v) + '</button>').join('') +
+          '" aria-label="' + esc(v.r) + '"' + (conFoto
+            ? ' title="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"></button>'
+            : '>' + esc(v.v) + '</button>')).join('') +
+        (vistos.length < grupo.length
+          ? '<a class="mapy-acabados-mas" href="' + href + '">+' + (grupo.length - vistos.length) + '</a>' : '') +
         '<span>' + grupo.length + ' ' + (p.vl || 'acabados') + '</span></div>'
       : '';
     return '<li class="' + clases.join(' ') + '" id="' + esc(p.m) + '" data-id="' + p.id + '">' +
@@ -1012,11 +1028,15 @@
     if (!grupo || grupo.length < 2) return '';
     const palabra = p.vl || 'acabados';
     const cambia = p.p == null ? 'cambian el peso en oro y el diamante' : 'cambia la foto y el precio';
+    const conFoto = !p.vl;
+    const nota = grupo.length + ' ' + palabra + ' · ' + cambia;
     return bloqueFicha(p.vl ? p.vl.toUpperCase() : 'ACABADO',
-      '<div class="mapy-acabados mapy-acabados--ficha">' + grupo.map(v =>
+      '<div class="mapy-acabados mapy-acabados--ficha' + (conFoto ? ' mapy-acabados--foto' : '') + '">' + grupo.map(v =>
       '<a class="mapy-acabado" href="#' + v.ruta + '" aria-current="' + (v.id === p.id) +
-      '" title="' + esc(v.r) + (v.pt ? ' · ' + esc(v.pt) : '') + '">' + esc(v.v) + '</a>').join('') +
-      '<span>' + grupo.length + ' ' + palabra + ' · ' + cambia + '</span></div>');
+      '" title="' + esc(v.r) + (v.pt ? ' · ' + esc(v.pt) : '') + '"' + (conFoto
+        ? ' aria-label="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"></a>'
+        : '>' + esc(v.v) + '</a>')).join('') +
+      (conFoto ? '</div><p class="mapy-acabados-nota">' + nota + '</p>' : '<span>' + nota + '</span></div>'));
   }
 
   // el dibujo solo vale si los quilates son de una sola piedra: en pendientes son
@@ -1046,7 +1066,15 @@
     const li = acabado.closest('li.ajax_block_product');
     const v = PROD.get(acabado.dataset.id);
     li.dataset.id = v.id;
-    $$('img', li).forEach(img => { if (v.il) { img.dataset.foto = v.il; cargarFoto(img); } });
+    // un fundido corto: entre acabados parecidos, sin él no se ve que ha cambiado
+    const suave = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $$('img', li).forEach(img => {
+      if (!v.il) return;
+      img.dataset.foto = v.il;
+      if (suave) img.addEventListener('load', () => img.animate(
+        [{ opacity: .2 }, { opacity: 1 }], { duration: 320, easing: 'ease-out' }), { once: true });
+      cargarFoto(img);
+    });
     $$('.product-price', li).forEach(s => { s.textContent = ' ' + v.pt + ' '; });
     $$('.product_img_link, .nombre a', li).forEach(a => a.setAttribute('href', '#' + v.ruta));
     $$('.mapy-acabado', li).forEach(b => b.setAttribute('aria-pressed', b === acabado));
