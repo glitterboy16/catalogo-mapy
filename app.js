@@ -191,6 +191,26 @@
     return s.slice(0, largo - 2).replace(/\s+?(\S+)?$/, '') + '...';
   };
   const ETIQUETA_AUTO = 'Producto subido automáticamente';
+  // cuando se subio y la ultima pasada de su proveedor (Ángel, 25/09): si la
+  // pasada se queda atras, esa tuberia ha dejado de funcionar
+  const fechaCorta = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+  const etiquetaAuto = (p, clase) => '<span class="mapy-auto' + (clase || '') + '">' + ETIQUETA_AUTO +
+    (p.alta ? '<small>el ' + fechaCorta(p.alta) + '</small>' : '') + '</span>';
+  function fechasAuto(p) {
+    const pasada = (A.pasadas || {})[p.id.split('-')[0]];
+    if (!p.alta && !pasada) return '';
+    let texto = '', atrasada = false;
+    if (pasada) {
+      const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+      const dia = new Date(pasada.slice(0, 10) + 'T00:00:00');
+      const dias = Math.round((hoy - dia) / 864e5);
+      atrasada = dias > 1;
+      texto = ' · última pasada de ' + esc(p.m) + ': ' +
+        (dias <= 0 ? 'hoy' : dias === 1 ? 'ayer' : 'hace ' + dias + ' días') + ', ' + fechaCorta(pasada);
+    }
+    return '<p class="mapy-auto-fechas' + (atrasada ? ' mapy-auto-fechas--atrasada' : '') + '">' +
+      (p.alta ? 'Subido el ' + fechaCorta(p.alta) : '') + texto + '</p>';
+  }
 
   const columnas = $('#columns');
   const cuerpo = document.body;
@@ -286,7 +306,7 @@
     return '<li class="' + clases.join(' ') + '" id="' + esc(p.m) + '" data-id="' + p.id + '">' +
       '<div class="product-container offer-' + esc(p.m) + '" itemscope itemtype="http://schema.org/Product">' +
       '<div class="left-block"><div class="product-image-container">' +
-      (p.auto ? '<span class="mapy-auto">' + ETIQUETA_AUTO + '</span>' : '') +
+      (p.auto ? etiquetaAuto(p) : '') +
       ' <a class="product_img_link" href="' + href + '" title="' + titulo + '" itemprop="url"> ' +
       '<img class="replace-2x img-responsive lazy hidden-xs" ' + FOTO(p.il, 'l') + ' alt="' + titulo +
       '" title="' + titulo + '" loading="lazy" decoding="async" width="186" height="290" itemprop="image">' +
@@ -729,8 +749,8 @@
     const h1 = $('h1[itemprop="name"]', columnas);
     if (h1) {
       h1.textContent = p.n;
-      if (p.auto) h1.insertAdjacentHTML('beforebegin',
-        '<span class="mapy-auto mapy-auto--ficha">' + ETIQUETA_AUTO + '</span>');
+      if (p.auto) h1.insertAdjacentHTML('beforebegin', '<span class="mapy-auto mapy-auto--ficha">' +
+        ETIQUETA_AUTO + '</span>' + fechasAuto(p));
     }
     $$('#product_reference span, .pb-center-column p > span.editable[itemprop="sku"]', columnas)
       .forEach(s => { s.textContent = p.r; s.setAttribute('content', p.r); });
