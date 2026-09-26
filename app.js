@@ -804,7 +804,7 @@
       rotulo.insertAdjacentHTML('afterend', p.det);
     }
     const extras = $('.pb-center-column .extras', columnas);
-    if (extras) extras.insertAdjacentHTML('beforebegin', acabados(p) + tecnica(p) + aval(p.m || 'Mapy'));
+    if (extras) extras.insertAdjacentHTML('beforebegin', acabados(p) + tecnica(p) + aval(p));
     montarSpecs();
 
     const precio = $('#our_price_display', columnas);
@@ -1017,7 +1017,7 @@
      todavia: va el minimo legal (2 anos, Ley 23/2003) y la tabla por marca queda
      vacia hasta que el cliente confirme cada acuerdo. Es el unico sitio donde se
      tocan: 'Marca': ['Distribuidora', anos]. */
-  const AVAL = { defecto: ['Joyería Mapy', 2], marcas: {
+  const AVAL = { defecto: ['Joyería Mapy', 0], marcas: {
     // 'Citizen': ['Citizen España', 5],   <- pendiente de confirmar
   } };
 
@@ -1054,10 +1054,32 @@
     });
   }
 
-  function aval(marca) {
-    const [dist, anos] = AVAL.marcas[marca] || AVAL.defecto;
-    return bloqueFicha('DISTRIBUIDOR OFICIAL Y GARANTÍA', '<p class="mapy-aval">' + esc(dist) +
-      ' · ' + anos + (anos === 1 ? ' año' : ' años') + ' de garantía</p>');
+  // los años de garantía que dice la propia tienda en sus descripciones
+  // («3 años de garantía internacional Oris»): los de la ficha y, si no los dice,
+  // los más repetidos en su marca. Antes salían 2 años en todas, y en un Oris
+  // la descripción decía 3 (26/09). Sin dato, no se pone número: lo confirma el
+  // cliente (SEGUIMIENTO, sección 4)
+  const anosDe = p => {
+    const m = /(\d+)\s+años\s+de\s+garant/i.exec((p.det || '').replace(/<[^>]+>/g, ' '));
+    return m ? +m[1] : 0;
+  };
+  const GARANTIA = {};
+  D.productos.forEach(p => {
+    const n = anosDe(p);
+    if (!n) return;
+    const c = GARANTIA[p.m] = GARANTIA[p.m] || {};
+    c[n] = (c[n] || 0) + 1;
+  });
+  Object.keys(GARANTIA).forEach(m => {
+    GARANTIA[m] = +Object.keys(GARANTIA[m]).sort((a, b) => GARANTIA[m][b] - GARANTIA[m][a])[0];
+  });
+
+  function aval(p) {
+    const marca = p.m || 'Mapy';
+    const [dist, fijos] = AVAL.marcas[marca] || AVAL.defecto;
+    const anos = fijos || anosDe(p) || GARANTIA[marca];
+    return bloqueFicha('DISTRIBUIDOR OFICIAL Y GARANTÍA', '<p class="mapy-aval">' + esc(dist) + ' · ' +
+      (anos ? anos + (anos === 1 ? ' año' : ' años') + ' de garantía' : 'garantía oficial de la marca') + '</p>');
   }
 
   // los acabados de un mismo modelo: cada uno es su propia ficha
@@ -1170,7 +1192,10 @@
 
     // el tema repite el menu (escritorio y movil) con los mismos id
     $$('#block_top_menu .cat-title').forEach(boton => boton.addEventListener('click', () => {
-      boton.classList.toggle('active');
+      const abierto = boton.classList.toggle('active');
+      // como la tienda: abierto, el icono es una X
+      const icono = $('i', boton);
+      if (icono) icono.className = abierto ? 'flaticon-cross-out' : 'flaticon-menu';
       const ul = $('ul.sf-menu', boton.parentElement);
       if (ul) ul.style.display = getComputedStyle(ul).display === 'none' ? 'block' : 'none';
     }));
@@ -1209,6 +1234,7 @@
     const promo = $$('.banner.visible-xs .promosmsg > div');
     if (promo.length === 2) {
       let k = 0;
+      promo[1].style.display = 'none';
       setInterval(() => {
         k = 1 - k;
         promo[0].style.display = k ? 'none' : '';
@@ -1218,6 +1244,17 @@
   }
 
   /* ------------------------------------------- enlaces y formularios */
+
+  // en movil, el titulo de cada bloque del pie o de las columnas lo abre y lo
+  // cierra, como accordionFooter y accordion de global.js en la tienda
+  document.addEventListener('click', e => {
+    if (!MOVIL.matches) return;
+    const t = e.target.closest('#footer .footer-block h4, ' +
+      '#left_column .block:not(#layered_block_left) .title_block, #right_column .block:not(#layered_block_left) .title_block');
+    if (!t) return;
+    e.preventDefault();
+    t.parentElement.classList.toggle('mapy-abierto', t.classList.toggle('active'));
+  });
 
   document.addEventListener('click', e => {
     const a = e.target.closest('a[href]');
