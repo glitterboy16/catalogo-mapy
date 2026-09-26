@@ -880,7 +880,7 @@
         (i + 1) + ' de ' + fotos.length + '"><img ' + FOTO(id, 'g') + ' alt="' + esc(p.n) + '"></button>'
       ).join('') + giro +
       (fotos.length > cuantas ? '<button type="button" class="mapy-mas-fotos" data-i="' + cuantas + '">+' +
-        (fotos.length - cuantas) + ' fotos</button>' : '') + '</div>';
+        (fotos.length - cuantas) + (fotos.length - cuantas === 1 ? ' foto' : ' fotos') + '</button>' : '') + '</div>';
     hidratar(caja);
     const vistas = $('#views_block', columnas);
     if (vistas) vistas.style.display = 'none';
