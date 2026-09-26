@@ -870,8 +870,11 @@
     // con giro de 360 grados (Facet, 25/09) la tercera casilla es el giro
     const cuantas = p.v360 ? 2 : 3;
     const visibles = fotos.slice(0, cuantas);
-    const giro = p.v360 ? '<button type="button" class="mapy-foto mapy-foto--360" aria-label="Ver la pieza en 360 grados">' +
-      '<img ' + FOTO(fotos[fotos.length > 1 ? 1 : 0], 'g') + ' alt="">' +
+    // de fondo, una vista que no este ya en el collage; si no la hay, el recuadro
+    // va en blanco: con la foto de al lado repetida parecia una foto duplicada
+    const fondo360 = fotos[cuantas];
+    const giro = p.v360 ? '<button type="button" class="mapy-foto mapy-foto--360' + (fondo360 ? '' : ' mapy-foto--360-solo') +
+      '" aria-label="Ver la pieza en 360 grados">' + (fondo360 ? '<img ' + FOTO(fondo360, 'g') + ' alt="">' : '') +
       '<span class="mapy-360"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c-5 0-9 2.2-9 5 0 2.3 2.7 4.2 6.5 4.8M12 5c5 0 9 2.2 9 5 0 2.1-2.3 3.9-5.7 4.6"/>' +
       '<path d="M8 12.5l1.8 2.3L7.6 17"/></svg>360°</span></button>' : '';
     caja.innerHTML = '<div class="mapy-collage' + (visibles.length > 1 || giro ? '' : ' mapy-collage--una') + '">' +
