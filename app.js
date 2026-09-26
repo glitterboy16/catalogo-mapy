@@ -783,7 +783,7 @@
     const marca = $('.marcashow', columnas);
     // logo de la marca: los de la tienda y Citizen van en datos.js; el de un
     // proveedor nuevo lo deja la automatizacion en img/auto/
-    const logo = p.ml && (D.logos[p.ml] || (p.ml.startsWith('img/') ? p.ml : ''));
+    const logo = (p.ml && (D.logos[p.ml] || (p.ml.startsWith('img/') ? p.ml : ''))) || logoDeMarca(p.m);
     if (marca) {
       if (logo) {
         const img = $('img', marca);
@@ -791,6 +791,16 @@
         marca.style.display = '';
       } else {
         marca.style.display = 'none';
+      }
+      // el logo lleva a la categoria de la marca: la plantilla, sacada de una
+      // ficha de Oris, enlazaba siempre a Oris, y el clon no tiene paginas de
+      // fabricante (26/09)
+      const enlaceMarca = $('a', marca);
+      const nombreMarca = (p.m || '').toLowerCase();
+      const rutaMarca = Object.keys(D.categorias).find(r => (D.categorias[r].nombre || '').toLowerCase() === nombreMarca);
+      if (enlaceMarca) {
+        if (rutaMarca) enlaceMarca.setAttribute('href', '#' + rutaMarca);
+        else enlaceMarca.removeAttribute('href');
       }
     }
 
@@ -1052,6 +1062,20 @@
       boton.setAttribute('aria-expanded', abierto ? 'true' : 'false');
       boton.textContent = abierto ? 'Mostrar menos' : 'Mostrar más';
     });
+  }
+
+  // el logo de una marca de la tienda, por su nombre: la muestra de relojes
+  // nuevos (Oris, Seiko...) no trae el suyo, y salía sin el bloque MARCA (26/09)
+  let LOGOS_POR_MARCA = null;
+  function logoDeMarca(nombre) {
+    if (!LOGOS_POR_MARCA) {
+      LOGOS_POR_MARCA = {};
+      D.productos.forEach(q => {
+        const k = (q.m || '').toLowerCase();
+        if (k && q.ml && D.logos[q.ml] && !LOGOS_POR_MARCA[k]) LOGOS_POR_MARCA[k] = D.logos[q.ml];
+      });
+    }
+    return LOGOS_POR_MARCA[(nombre || '').toLowerCase()] || '';
   }
 
   // los años de garantía que dice la propia tienda en sus descripciones
