@@ -707,13 +707,16 @@
     $$('.lighter', columnas).forEach(s => { s.textContent = ' "' + texto + '" '; });
     $$('#search_query_top').forEach(i => { i.value = texto; });
     rellenarListado(columnas, lista, q, extra => ir('/es/buscar', Object.assign({}, q, extra)));
+    // en español: la tienda las enseña en inglés porque al tema le faltan esas
+    // dos traducciones («132 results have been found.», 26/09). En producción,
+    // Localización > Traducciones > Traducciones del tema
     $$('.heading-counter', columnas).forEach(t => {
-      t.textContent = lista.length === 1 ? ' 1 result has been found. ' : ' ' + lista.length + ' results have been found. ';
+      t.textContent = lista.length === 1 ? ' Se ha encontrado 1 resultado. ' : ' Se han encontrado ' + lista.length + ' resultados. ';
     });
     if (!lista.length) {
       const centro = $('#center_column', columnas);
       $$('.content_sortPagiBar, .top-pagination-content, ul.product_list', centro).forEach(x => x.remove());
-      centro.insertAdjacentHTML('beforeend', '<p class="alert alert-warning"> No results were found for your search&nbsp;"' +
+      centro.insertAdjacentHTML('beforeend', '<p class="alert alert-warning"> No hay resultados para tu búsqueda&nbsp;"' +
         esc(texto) + '"</p>');
     }
   }
