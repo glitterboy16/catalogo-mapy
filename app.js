@@ -170,6 +170,20 @@
   const eur = v => miles(v) + ' €';
   const POR_PAGINA = 96;
   const ACABADOS_VISIBLES = 5;              // en la tarjeta; el resto, en la ficha
+  // el encuadre de la miniatura de un acabado (26/09): la esfera del reloj, o la
+  // joya entera, en el centro y del mismo tamano en todas. fo = [centro x, centro y,
+  // ancho de la pieza] en la foto de la tarjeta (372x580), de publicar-clon.py.
+  // llena: cuanto del recuadro ocupa la pieza
+  const ALTO_L = 580 / 372;
+  function encuadreAcabado(v, llena) {
+    if (!v.fo) return '';
+    const [fx, fy, fw] = v.fo;
+    const s = Math.min(4, Math.max(0.6, llena / fw));
+    const pos = (f, t) => Math.abs(1 - t) < 0.01 ? 50 : (0.5 - f * t) / (1 - t) * 100;
+    return ' style="background-size:' + (s * 100).toFixed(1) + '%;background-position:' +
+      pos(fx, s).toFixed(1) + '% ' + pos(fy, s * ALTO_L).toFixed(1) + '%"';
+  }
+  const esReloj = v => v.ruta.startsWith('/es/relojes/');
   const GRUPO = new Map();
   D.productos.forEach(p => {
     if (!p.base) return;
@@ -297,7 +311,8 @@
         esc(p.vl || 'Acabados') + '">' + vistos.map(v =>
           '<button type="button" class="mapy-acabado" data-id="' + v.id + '" aria-pressed="' + (v.id === p.id) +
           '" aria-label="' + esc(v.r) + '"' + (conFoto
-            ? ' title="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"></button>'
+            ? ' title="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"' +
+              encuadreAcabado(v, esReloj(v) ? 1.3 : 0.78) + '></button>'
             : '>' + esc(v.v) + '</button>')).join('') +
         (vistos.length < grupo.length
           ? '<a class="mapy-acabados-mas" href="' + href + '">+' + (grupo.length - vistos.length) + '</a>' : '') +
@@ -1057,7 +1072,8 @@
       '<div class="mapy-acabados mapy-acabados--ficha' + (conFoto ? ' mapy-acabados--foto' : '') + '">' + grupo.map(v =>
       '<a class="mapy-acabado" href="#' + v.ruta + '" aria-current="' + (v.id === p.id) +
       '" title="' + esc(v.r) + (v.pt ? ' · ' + esc(v.pt) : '') + '"' + (conFoto
-        ? ' aria-label="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"></a>'
+        ? ' aria-label="' + esc(v.r) + '" data-foto="' + esc(v.il || '') + '" data-tipo="l"' +
+          encuadreAcabado(v, esReloj(v) ? 0.9 : 0.84) + '></a>'
         : '>' + esc(v.v) + '</a>')).join('') +
       (conFoto ? '</div><p class="mapy-acabados-nota">' + nota + '</p>' : '<span>' + nota + '</span></div>'));
   }
